@@ -3,11 +3,13 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
+from flask_mail import Mail
 from config import Config
 
 db = SQLAlchemy()
 migrate = Migrate()
 jwt = JWTManager()
+mail = Mail()
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -16,7 +18,14 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    CORS(app)
+    mail.init_app(app)
+    # Allow specific origins for frontend (Vite defaults to 5173, but can shift to 5174, 5175)
+    allowed_origins = [
+        "http://localhost:5173", "http://127.0.0.1:5173",
+        "http://localhost:5174", "http://127.0.0.1:5174",
+        "http://localhost:5175", "http://127.0.0.1:5175"
+    ]
+    CORS(app, resources={r"/*": {"origins": allowed_origins}}, supports_credentials=True)
 
     # Register blueprints 
     from app.routes.auth_routes import auth_bp

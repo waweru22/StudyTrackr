@@ -52,6 +52,21 @@ class RuleEngine:
                 if duration > limit:
                     is_match = True
 
+            # 5. Course Weight (Planning Phase)
+            elif "course_weight" in trigger_stmt:
+                weight = context_data.get('course_weight', 0)
+                
+                # Simple parser for >=, <=, ==
+                if ">=" in trigger_stmt:
+                    val = int(trigger_stmt.split(">=")[1].split(",")[0].strip())
+                    if weight >= val: is_match = True
+                elif "<=" in trigger_stmt:
+                    val = int(trigger_stmt.split("<=")[1].split(",")[0].strip())
+                    if weight <= val: is_match = True
+                elif "==" in trigger_stmt:
+                    val = int(trigger_stmt.split("==")[1].split(",")[0].strip())
+                    if weight == val: is_match = True
+
             if is_match:
                 # LOGGING AS REQUESTED
                 print(f"\n[EXPERT SYSTEM] Rule Fired: {rule.principle}")

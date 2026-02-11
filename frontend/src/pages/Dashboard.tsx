@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import quoteBg from '../assets/quote_background.png';
 import mathIcon from '../assets/math_icon.png';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { ExternalLink, Flame, Clock, Brain, Award, User } from 'lucide-react';
-import { useState } from 'react';
+import { ExternalLink, Flame, Clock, Brain, Award, User, RefreshCw } from 'lucide-react';
 import SessionModal from '../components/SessionModal';
+import { useUser } from '../context/UserContext';
+import { api } from '../api/client';
+// import { useNavigate } from 'react-router-dom';
+import type { DashboardData, FeedItem } from '../types';
 
 const focusData = [
     { name: 'Mon', focus: 50 },
@@ -15,16 +18,45 @@ const focusData = [
     { name: 'Fri', focus: 75 },
     { name: 'Sat', focus: 60 },
     { name: 'Sun', focus: 35 },
-    { name: 'NextMon', focus: 85 }, // Extrapolated for curve
+    { name: 'NextMon', focus: 85 },
 ];
 
-
-import { useUser } from '../context/UserContext';
-//...
 
 const Dashboard: React.FC = () => {
     const { level, semester } = useUser();
     const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
+    const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+    const [loading, setLoading] = useState(true);
+    // const navigate = useNavigate();
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const data = await api.get<DashboardData>('/dashboard');
+                setDashboardData(data);
+            } catch (error) {
+                console.error("Failed to fetch dashboard data", error);
+                // If 401, maybe redirect (handled by api client throwing, but we catch here)
+                // For now just keep loading false so UI shows
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
+
+    const getIconForType = (type: string) => {
+        if (type === 'alert') return <span className="absolute left-0 top-1.5 w-3.5 h-3.5 rounded-full bg-red-500 border-2 border-white shadow-sm z-10"></span>;
+        if (type === 'tip') return <span className="absolute left-0 top-1.5 w-3.5 h-3.5 rounded-full bg-blue-400 border-2 border-white shadow-sm z-10"></span>;
+        return <span className="absolute left-0 top-1.5 w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-white shadow-sm z-10"></span>;
+    };
+
+    const getTitleForType = (item: FeedItem) => {
+        if (item.title) return item.title;
+        if (item.type === 'alert') return 'System Alert';
+        if (item.type === 'tip') return 'Study Tip';
+        return 'Update';
+    };
 
     return (
         <div className="flex h-screen bg-white font-sans text-gray-900">
@@ -43,14 +75,13 @@ const Dashboard: React.FC = () => {
                             </div>
                             <div>
                                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Level</p>
-                                <p className="text-sm font-bold text-blue-700">{level}</p>
+                                <p className="text-sm font-bold text-blue-700">{dashboardData?.user?.level || level}</p>
                             </div>
                         </div>
                     </div>
                     <div className="flex items-center space-x-3">
-                        <span className="text-sm font-bold text-gray-900">Waweru Ezaga</span>
+                        <span className="text-sm font-bold text-gray-900">{dashboardData?.user?.username || 'Student'}</span>
                         <div className="h-10 w-10 rounded-full bg-pink-500 overflow-hidden border-2 border-white shadow-sm flex items-center justify-center">
-                            {/* Placeholder Avatar */}
                             <span className="text-lg">👨🏾‍🎓</span>
                         </div>
                     </div>
@@ -73,9 +104,11 @@ const Dashboard: React.FC = () => {
                                         <img src={mathIcon} alt="Course Icon" className="h-full w-full object-contain" />
                                     </div>
                                     <div>
-                                        <h2 className="text-lg font-bold text-gray-900 mb-1">MTH202 – Mathematical Methods II</h2>
+                                        <h2 className="text-lg font-bold text-gray-900 mb-1">{dashboardData?.next_session?.course !== "None" ? dashboardData?.next_session?.course : "No Upcoming Session"}</h2>
                                         <div className="flex items-center space-x-4 text-xs text-gray-500 font-medium">
-                                            <span className="flex items-center"><Clock size={14} className="mr-1" /> 90 mins</span>
+                                            {dashboardData?.next_session?.time && dashboardData.next_session.time !== "N/A" && (
+                                                <span className="flex items-center"><Clock size={14} className="mr-1" /> {dashboardData.next_session.time}</span>
+                                            )}
                                             <span className="flex items-center"><Brain size={14} className="mr-1" /> Deep Work</span>
                                             <span className="flex items-center"><User size={14} className="mr-1" /> Individual</span>
                                         </div>
@@ -100,19 +133,19 @@ const Dashboard: React.FC = () => {
                             <div className="relative z-10 px-8 w-full">
                                 <h3 className="text-xs font-bold text-gray-300 uppercase mb-2">Quote of the Day</h3>
                                 <p className="text-white font-serif italic text-lg leading-relaxed max-w-2xl">
-                                    "Success is not final, failure is not fatal: it is the courage to continue that counts."
+                                    "{dashboardData?.quote?.text || "Success is not final, failure is not fatal: it is the courage to continue that counts."}"
                                 </p>
-                                <p className="text-right text-white text-xs font-medium mt-2">— Winston Churchill</p>
+                                <p className="text-right text-white text-xs font-medium mt-2">— {dashboardData?.quote?.author || "Winston Churchill"}</p>
                             </div>
                         </div>
 
                         {/* Focus Pulse Chart */}
                         <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                            {/* Chart Content (Keep generic for now) */}
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="text-sm font-bold text-gray-700">Focus Pulse</h3>
                                 <ExternalLink size={16} className="text-gray-400 cursor-pointer hover:text-gray-600" />
                             </div>
-
                             <div className="flex justify-end mb-4">
                                 <div className="flex items-center space-x-2 text-xs">
                                     <span className="px-2 py-1 bg-gray-100 rounded text-gray-600">ID</span>
@@ -122,7 +155,6 @@ const Dashboard: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
-
                             <div className="h-64 w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart data={focusData}>
@@ -132,23 +164,10 @@ const Dashboard: React.FC = () => {
                                                 <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
-                                        <XAxis
-                                            dataKey="name"
-                                            axisLine={false}
-                                            tickLine={false}
-                                            tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                                            dy={10}
-                                        />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9CA3AF' }} dy={10} />
                                         <YAxis hide />
                                         <Tooltip />
-                                        <Area
-                                            type="monotone"
-                                            dataKey="focus"
-                                            stroke="#4F46E5"
-                                            strokeWidth={3}
-                                            fillOpacity={1}
-                                            fill="url(#colorFocus)"
-                                        />
+                                        <Area type="monotone" dataKey="focus" stroke="#4F46E5" strokeWidth={3} fillOpacity={1} fill="url(#colorFocus)" />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>
@@ -182,61 +201,31 @@ const Dashboard: React.FC = () => {
                         <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm min-h-[400px] mr-[90px]">
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="text-sm font-bold text-gray-700">Recent Activity</h3>
-                                <ExternalLink size={14} className="text-gray-400" />
+                                <button onClick={() => window.location.reload()}><RefreshCw size={14} className="text-gray-400 hover:text-blue-600" /></button>
                             </div>
 
                             <div className="space-y-6 relative">
-                                {/* Timeline Line (simplified) */}
+                                {/* Timeline Line */}
                                 <div className="absolute left-1.5 top-2 bottom-2 w-0.5 bg-gray-100"></div>
 
-                                {/* Item 1 */}
-                                <div className="relative pl-6">
-                                    <span className="absolute left-0 top-1.5 w-3.5 h-3.5 rounded-full bg-red-500 border-2 border-white shadow-sm z-10"></span>
-                                    <div className="flex justify-between items-start mb-1">
-                                        <h4 className="text-xs font-bold text-gray-900">Missed Session</h4>
-                                        <span className="text-[10px] text-gray-400">09:34 am</span>
-                                    </div>
-                                    <p className="text-xs text-gray-500 leading-relaxed">
-                                        You missed your Thermodynamics deep-work block. To keep your progr...
-                                    </p>
-                                </div>
+                                {loading && <p className="text-sm text-gray-400 pl-6">Loading feed...</p>}
 
-                                {/* Item 2 */}
-                                <div className="relative pl-6">
-                                    <span className="absolute left-0 top-1.5 w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-white shadow-sm z-10"></span>
-                                    <div className="flex justify-between items-start mb-1">
-                                        <h4 className="text-xs font-bold text-gray-900">Productivity Analysis</h4>
-                                        <span className="text-[10px] text-gray-400">15 Dec</span>
+                                {!loading && dashboardData?.feed && dashboardData.feed.map((item, index) => (
+                                    <div key={index} className="relative pl-6">
+                                        {getIconForType(item.type)}
+                                        <div className="flex justify-between items-start mb-1">
+                                            <h4 className="text-xs font-bold text-gray-900">{getTitleForType(item)}</h4>
+                                            <span className="text-[10px] text-gray-400">{new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 leading-relaxed">
+                                            {item.message}
+                                        </p>
                                     </div>
-                                    <p className="text-xs text-gray-500 leading-relaxed">
-                                        Your focus rate is up 15% this week. The AI has identified that your 8:00 AM 'E...
-                                    </p>
-                                </div>
+                                ))}
 
-                                {/* Item 3 */}
-                                <div className="relative pl-6">
-                                    <span className="absolute left-0 top-1.5 w-3.5 h-3.5 rounded-full bg-yellow-400 border-2 border-white shadow-sm z-10"></span>
-                                    <div className="flex justify-between items-start mb-1">
-                                        <h4 className="text-xs font-bold text-gray-900">Location Optimization</h4>
-                                        <span className="text-[10px] text-gray-400">13 Dec</span>
-                                    </div>
-                                    <p className="text-xs text-gray-500 leading-relaxed">
-                                        Performance in the Dorm has dropped by 20%. The AI has reassigned your n...
-                                    </p>
-                                </div>
-
-                                {/* Item 4 */}
-                                <div className="relative pl-6">
-                                    <span className="absolute left-0 top-1.5 w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-white shadow-sm z-10"></span>
-                                    <div className="flex justify-between items-start mb-1">
-                                        <h4 className="text-xs font-bold text-gray-900">Milestone Reached</h4>
-                                        <span className="text-[10px] text-gray-400">13 Dec</span>
-                                    </div>
-                                    <p className="text-xs text-gray-500 leading-relaxed">
-                                        5 days of optimized sessions complete! The AI has upgraded your profile to ...
-                                    </p>
-                                </div>
-
+                                {!loading && (!dashboardData?.feed || dashboardData.feed.length === 0) && (
+                                    <div className="pl-6 text-xs text-gray-400">No recent activity</div>
+                                )}
                             </div>
                         </div>
 

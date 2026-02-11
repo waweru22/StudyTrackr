@@ -14,7 +14,7 @@ interface Step4FormData {
 
 const OnboardingStep4: React.FC = () => {
     const navigate = useNavigate();
-    const { step4Data, setStep4Data } = useUser();
+    const { step1Data, step4Data, setStep4Data, registerUser } = useUser();
     const [formData, setFormData] = useState<Step4FormData>({
         peakTime: step4Data.peakTime || '',
         focusDuration: step4Data.focusDuration || '',
@@ -24,6 +24,7 @@ const OnboardingStep4: React.FC = () => {
     });
 
     const [errors, setErrors] = useState<Partial<Record<keyof Step4FormData, boolean>>>({});
+    const [loading, setLoading] = useState(false);
 
     const handleSelection = (field: keyof Step4FormData, value: string) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -33,7 +34,7 @@ const OnboardingStep4: React.FC = () => {
         }
     };
 
-    const validateAndSubmit = () => {
+    const validateAndSubmit = async () => {
         const newErrors: Partial<Record<keyof Step4FormData, boolean>> = {};
         let isValid = true;
 
@@ -47,11 +48,23 @@ const OnboardingStep4: React.FC = () => {
         setErrors(newErrors);
 
         if (isValid) {
-            // Proceed to dashboard
+            setLoading(true); // Set loading true before API call
+            // Update context first
             setStep4Data(formData);
-            console.log('Form submitted:', formData);
-            alert('Onboarding Complete! Redirecting to Dashboard...');
-            navigate('/dashboard');
+
+            // Trigger Registration
+            try {
+                // For robustness, passing formData directly is better if registerUser supports it.
+                // If registerUser relies solely on context state, there might be a slight delay.
+                // For this edit, we assume registerUser can be called after setStep4Data.
+                await registerUser(formData);
+                console.log('Registration complete.');
+                navigate('/verify-otp', { state: { email: step1Data.email } });
+            } catch (e) {
+                console.error("Registration failed:", e);
+                // Optionally, display an error message to the user
+                alert("Registration failed. Please try again.");
+            }
         }
     };
 
@@ -173,9 +186,10 @@ const OnboardingStep4: React.FC = () => {
                 <div className="pt-8 pb-12">
                     <button
                         onClick={validateAndSubmit}
-                        className="w-full bg-blue-800 hover:bg-blue-900 text-white font-semibold py-3.5 rounded-lg shadow-sm transition-all transform active:scale-[0.99] text-sm"
+                        disabled={loading}
+                        className={`w-full text-white font-semibold py-3.5 rounded-lg shadow-sm transition-all transform active:scale-[0.99] text-sm ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-800 hover:bg-blue-900'}`}
                     >
-                        Done
+                        {loading ? 'Finalizing...' : 'Done'}
                     </button>
                 </div>
 

@@ -7,7 +7,7 @@ import random
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
-@dashboard_bp.route('/', methods=['GET'])
+@dashboard_bp.route('', methods=['GET'])
 @jwt_required()
 def get_dashboard():
     user_id = int(get_jwt_identity())
@@ -15,17 +15,28 @@ def get_dashboard():
     
     # Real-time Trigger: Check for missed sessions
     from app.services.schedule_service import ScheduleService
+    from app.services.gamification_service import GamificationService # Import Gamification
     ScheduleService.check_missed_sessions(user_id)
+    GamificationService.calculate_streak(user_id) # Update streak status
     
     # Next session
-    # Next session: Must be TODAY and >= current time
+    # Next session: Must be (Today AND > Current Time) OR (Future Date)
     today = datetime.utcnow().date()
     current_time = datetime.utcnow().time()
     
+    # Logic: 
+    # 1. Check for sessions LATER TODAY
     next_session = ScheduleBlock.query.filter_by(user_id=user_id, date=today)\
         .filter(ScheduleBlock.start_time > current_time)\
         .order_by(ScheduleBlock.start_time.asc())\
         .first()
+        
+    # 2. If none today, check FUTURE DATES
+    if not next_session:
+        next_session = ScheduleBlock.query.filter(
+            ScheduleBlock.user_id == user_id, 
+            ScheduleBlock.date > today
+        ).order_by(ScheduleBlock.date.asc(), ScheduleBlock.start_time.asc()).first()
     
     # Unified Feed
     # 1. Fetch Broadcasts (Target level or 0)
@@ -34,9 +45,10 @@ def get_dashboard():
         (Broadcast.target_level == user.level) | (Broadcast.target_level == 0)
     ).order_by(Broadcast.timestamp.desc()).limit(5).all()
     
-    # 2. Fetch System Alerts
+    # 2. Fetch System Alerts - Sort by created_at DESC (using created_at or timestamp aliased)
     from app.models.system_alert import SystemAlert
-    alerts = SystemAlert.query.filter_by(user_id=user_id).order_by(SystemAlert.timestamp.desc()).limit(5).all()
+    # Requirement: sort by created_at
+    alerts = SystemAlert.query.filter_by(user_id=user_id).order_by(SystemAlert.created_at.desc()).limit(5).all()
     
     # 3. Merge and Sort
     feed_items = []
@@ -47,7 +59,10 @@ def get_dashboard():
         
     for a in alerts:
         item = a.to_dict()
-        feed_items.append(item) # Type handled in Model to_dict
+        # Add created_at to dict if not present in model to_dict?
+        # Model to_dict has timestamp. Let's ensure frontend gets what it needs.
+        # But sorting was the requirement.
+        feed_items.append(item)
         
     # Sort by timestamp desc (isoformat string works for comparison if YYYY-MM-DD...)
     # But safer to use actual datetime objects if we had them, OR rely on string sort since ISO8601 is sortable.

@@ -6,24 +6,37 @@ course_bp = Blueprint('course', __name__)
 @course_bp.route('/filter', methods=['GET'])
 def get_courses():
     level_filter = request.args.get('level')
+    semester_filter = request.args.get('semester')
     
     query = Course.query
+    
     if level_filter:
         try:
             level = int(level_filter)
             query = query.filter_by(level=level)
         except ValueError:
-            return jsonify({'error': 'Invalid level parameters'}), 400
+            return jsonify({'error': 'Invalid level parameter'}), 400
+
+    if semester_filter:
+        try:
+            semester = int(semester_filter)
+            query = query.filter_by(semester=semester)
+        except ValueError:
+            return jsonify({'error': 'Invalid semester parameter'}), 400
+            
+    # Allow fetching all if filters are missing, or strict? 
+    # Current behavior is to filter if param exists.
             
     courses = query.order_by(Course.code.asc()).all()
     
-    # Simplify response for Stage 2 UI (id, code, name, weight)
     return jsonify([{
         'id': c.id,
         'code': c.code,
         'name': c.name,
-        'weight': c.weight,
-        'name': c.name
+        'credits': c.credits,
+        'level': c.level,
+        'semester': c.semester,
+        'weight': c.weight
     } for c in courses]), 200
 
 @course_bp.route('/all', methods=['GET'])

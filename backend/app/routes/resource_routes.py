@@ -16,3 +16,9 @@ def search_resources():
     resources = ResourceService.search_resources(course_id, topic)
     
     return jsonify(resources), 200
+
+@resource_bp.route('/tips', methods=['GET'])
+def get_study_tips():
+    from app.services.study_tips_service import StudyTipsService
+    # Return dictionary of tips
+    return jsonify(StudyTipsService.TIPS), 200

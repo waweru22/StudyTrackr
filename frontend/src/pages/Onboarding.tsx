@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, ArrowRight, Check, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import logo from '../assets/logo.png';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 
 const Onboarding: React.FC = () => {
@@ -10,6 +10,7 @@ const Onboarding: React.FC = () => {
 
     const [formData, setFormData] = useState({
         email: step1Data.email,
+        username: step1Data.username,
         phone: step1Data.phone,
         level: step1Data.level || '100', // Ensure default if empty
         password: step1Data.password,
@@ -56,6 +57,16 @@ const Onboarding: React.FC = () => {
         }
     };
 
+    // Check for error from redirect (e.g. duplicate email)
+    const location = useLocation();
+    useEffect(() => {
+        if (location.state?.error) {
+            setErrors(prev => ({ ...prev, email: location.state.error }));
+            // Clear state so refresh doesn't show it again? 
+            // window.history.replaceState({}, document.title) // proper cleanup might be needed
+        }
+    }, [location.state]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -67,6 +78,10 @@ const Onboarding: React.FC = () => {
             newErrors.email = "Email is required";
         } else if (!validateEmail(formData.email)) {
             newErrors.email = "Please enter a valid email address";
+        }
+
+        if (!formData.username.trim()) {
+            newErrors.username = "Username is required";
         }
 
         if (!formData.phone.trim()) {
@@ -148,6 +163,27 @@ const Onboarding: React.FC = () => {
                             <p className="text-red-600 text-sm font-medium mt-1 flex items-center">
                                 <AlertCircle size={14} className="mr-1" />
                                 {errors.email}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Username */}
+                    <div className="space-y-1.5">
+                        <label className="block text-base font-medium font-dm-sans text-gray-700">
+                            Username <span className="text-red-600">*</span>
+                        </label>
+                        <input
+                            name="username"
+                            type="text"
+                            value={formData.username}
+                            onChange={handleChange}
+                            placeholder=""
+                            className={`w-full px-4 py-3 rounded-lg border ${errors.username ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400 text-sm transition-shadow shadow-sm`}
+                        />
+                        {errors.username && (
+                            <p className="text-red-600 text-sm font-medium mt-1 flex items-center">
+                                <AlertCircle size={14} className="mr-1" />
+                                {errors.username}
                             </p>
                         )}
                     </div>

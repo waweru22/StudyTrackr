@@ -125,12 +125,60 @@ def seed_courses():
         "tags": "Audit, Optimization"
       },
       {
+        "principle": "The Feynman Technique",
+        "rule_logic": "Deep Processing & Simplification",
+        "content": "To learn deep concepts, teaching it in simple terms exposes gaps in understanding. High complexity requires active reconstruction.",
+        "inference_trigger": "If course_weight >= 4, suggest 'The Feynman Technique'.",
+        "academic_source": "eLife (2024)",
+        "tags": "Deep Work, Simplification"
+      },
+      {
+        "principle": "Pomodoro Technique",
+        "rule_logic": "Time-Boxing for Focus",
+        "content": "25 minutes intense focus, 5 minutes break. Used to combat procrastination and maintain stamina on lower cognitive load tasks.",
+        "inference_trigger": "If course_weight <= 2, suggest 'Pomodoro' to maintain momentum.",
+        "academic_source": "Cirillo (1980)",
+        "tags": "Time Management, Focus"
+      },
+      {
+        "principle": "Blurting (Active Recall)",
+        "rule_logic": "Retrieval Practice",
+        "content": "Write down everything you know about a topic from memory, then check against notes. Best for factual subjects.",
+        "inference_trigger": "If course_weight == 3, suggest 'Blurting'.",
+        "academic_source": "Roediger & Karpicke (2006)",
+        "tags": "Active Recall, Memory"
+      },
+      {
         "principle": "Cognitive Load Balancing",
         "rule_logic": "Resource Depletion Management",
         "content": "Deep Work depletes cognitive resources faster. Budget constraints prevent burnout.",
         "inference_trigger": "If daily_cognitive_load > daily_cognitive_budget, reschedule overflow to next day.",
         "academic_source": "Sweller (1988)",
         "tags": "Cognitive Load, Budget"
+      }, 
+      {
+        "principle": "Circadian Energy Mapping",
+        "rule_logic": "Vibe-to-Complexity Alignment",
+        "content": "High-complexity tasks (Weight 5) should only be scheduled during 'High Energy' vibes. Low energy states require 'Administrative' or 'Review' tasks to prevent burnout.",
+        "inference_trigger": "If session_vibe == 'Low Energy' AND course_weight >= 4, swap technique to 'Pomodoro' and limit duration to 25 mins.",
+        "academic_source": "Biological Rhythm Research (2023)",
+        "tags": "Vibe, Energy, Complexity"
+      },
+      {
+        "principle": "Environmental Contextualization",
+        "rule_logic": "Location-Based Cognitive Load",
+        "content": "Public environments like 'Cafe' or 'Class' increase auditory distractions. Solo/Deep Work techniques are less effective here than group-based or active recall methods.",
+        "inference_trigger": "If session_environment in ['Class', 'Other'] AND social_setting == 'Group', prioritize 'Feynman Technique' (Peer Teaching mode).",
+        "academic_source": "Environmental Psychology Review",
+        "tags": "Environment, Social, Context"
+      },
+      {
+        "principle": "Template Enforcement (Deep Work)",
+        "rule_logic": "Contiguous Block Allocation",
+        "content": "The Deep Work template requires 90-120 minute uninterrupted blocks. The system must merge standard 60-min blocks for high-weight courses.",
+        "inference_trigger": "If base_template == 'deep_work' AND course_weight >= 4, merge adjacent schedule slots into a single 120-min block.",
+        "academic_source": "Cal Newport (Deep Work)",
+        "tags": "Deep Work, Template"
       }
     ]
     

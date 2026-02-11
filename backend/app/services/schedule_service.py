@@ -70,6 +70,10 @@ class ScheduleService:
                         db.session.add(alert)
                         alerts_created += 1
                         
+                        # Apply Penalty
+                        from app.services.gamification_service import GamificationService
+                        GamificationService.penalize_missed_session(user_id)
+                        
         if alerts_created > 0:
             db.session.commit()
             return True

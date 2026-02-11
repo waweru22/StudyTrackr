@@ -4,8 +4,33 @@ from app.services.inference_service import InferenceService
 from flask_jwt_extended import create_access_token
 from app.models.user import User
 from app import db # Need to get user to create token
+from werkzeug.security import check_password_hash
 
 auth_bp = Blueprint('auth', __name__)
+
+@auth_bp.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    email = data.get('email', '').strip().lower()
+    password = data.get('password')
+    
+    user, message = AuthService.login_user(email, password)
+    
+    if user:
+        token = create_access_token(identity=str(user.id))
+        return jsonify({
+            "message": message,
+            "access_token": token,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "level": user.level,
+                "role": user.role
+            }
+        }), 200
+        
+    return jsonify({"error": message}), 401
 
 @auth_bp.route('/request-otp', methods=['POST'])
 def request_otp():
@@ -15,7 +40,8 @@ def request_otp():
         return jsonify({"error": "Email is required"}), 400
         
     otp = AuthService.generate_otp(email)
-    return jsonify({"message": "OTP generated", "otp_debug": otp}), 200
+    # Security: Do not return OTP in response
+    return jsonify({"message": "OTP sent to email"}), 200
 
 @auth_bp.route('/verify-otp', methods=['POST'])
 def verify_otp():
@@ -28,22 +54,18 @@ def verify_otp():
     if not success:
         return jsonify({"error": message}), 400
         
-    # Check if user exists to decide if login or signup flow, 
-    # but requirement says verify-otp just validates. 
-    # Realistically, it should issue a token if user exists.
-    all_users = [u.email for u in User.query.all()]
-    print(f"DEBUG DB Emails: {all_users}")
-    print(f"DEBUG Looking for: '{email}'")
+    # Check if user exists to token
     user = User.query.filter_by(email=email).first()
-    print(f"DEBUG Verify OTP: Email '{email}' Found User? {user}")
     token = None
+    user_id = None
     if user:
         token = create_access_token(identity=str(user.id))
+        user_id = user.id
         
     return jsonify({
         "message": message, 
         "access_token": token,
-        "debug_user_found": str(user)
+        "user_id": user_id
     }), 200
 
 @auth_bp.route('/admin/register', methods=['POST'])
@@ -83,15 +105,33 @@ def register_admin():
 @auth_bp.route('/onboard', methods=['POST'])
 def onboard():
     data = request.get_json()
-    # Expects full profile data
-    user, message = AuthService.register_user(data)
-    if not user:
-        return jsonify({"error": message}), 400
     
-    # Trigger Inference Engine
-    # Expects 'selected_courses': [id1, id2]
-    course_ids = data.get('selected_course_ids', [])
-    InferenceService.generate_week_schedule(user, course_ids)
-    
-    token = create_access_token(identity=str(user.id))
-    return jsonify({"message": "Onboarding Complete", "access_token": token, "user_id": user.id}), 201
+    try:
+        # 1. Register User (No Commit yet)
+        user, message = AuthService.register_user(data, commit=False)
+        if not user:
+            return jsonify({"error": message}), 400
+        
+        # 2. Get Course IDs for Inference
+        # User.courses are available in session (flushed)
+        course_ids = [c.id for c in user.courses]
+        
+        # 3. Trigger Inference Engine
+        # Pass IDs explicitly as requested
+        sched_result = InferenceService.generate_week_schedule(user.id, selected_course_ids=course_ids)
+        if sched_result and "No courses" in sched_result:
+             db.session.rollback()
+             return jsonify({"error": sched_result}), 400
+
+        # 4. Trigger OTP Email
+        AuthService.generate_otp(user.email)
+        
+        # 5. ATOMIC COMMIT
+        db.session.commit()
+        
+        return jsonify({"message": message, "user_id": user.id}), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Onboarding Failed: {str(e)}")
+        return jsonify({"error": "Registration failed due to system error."}), 500

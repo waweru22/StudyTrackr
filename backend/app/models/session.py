@@ -38,6 +38,12 @@ class ScheduleBlock(db.Model):
     end_time = db.Column(db.Time, nullable=False)
     block_type = db.Column(db.String(50)) # Deep Work, Active Recall, Break
     
+    # New Fields for Expert System
+    status = db.Column(db.String(20), default='upcoming', nullable=False) # upcoming, completed, missed
+    technique_name = db.Column(db.String(100), nullable=True, default='')
+    technique_details = db.Column(db.Text, nullable=True, default='')
+
+    
     # Rule Engine Metadata (Transparency)
     refinement_reason = db.Column(db.String(100)) # The principle applied
     academic_citation = db.Column(db.String(100)) # e.g. "Bjork & Bjork (2011)"
@@ -45,6 +51,8 @@ class ScheduleBlock(db.Model):
     
     user = db.relationship('User', backref=db.backref('schedule_blocks', lazy=True))
     course = db.relationship('Course', backref=db.backref('scheduled_events', lazy=True))
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def is_session_match(self, session_datetime):
         """
