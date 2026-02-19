@@ -98,7 +98,8 @@ class AuthService:
                 staff_id=staff_id,
                 learning_style=data.get('learning_style', 'Unknown'),
                 peak_time=data.get('peak_time'),
-                base_template=data.get('base_template'),
+                # Fix: Frontend sends 'selectedBlueprint' (Step 3), Model expects 'base_template'
+                base_template=data.get('selectedBlueprint') or data.get('base_template'),
                 environment_pref=data.get('environment_pref'),
                 focus_threshold=data.get('focus_threshold', 60),
                 preferred_environment_v2=data.get('preferred_environment'),
@@ -138,13 +139,17 @@ class AuthService:
         return new_user, msg
 
     @staticmethod
-    def login_user(email, password):
-        if not email or not password:
-            return None, "Email and password are required"
-            
-        user = User.query.filter_by(email=email).first()
+    def login_user(identifier, password):
+        if not identifier or not password:
+            return None, "Username/Email and password are required"
+        
+        # Check if identifier looks like an email
+        if '@' in identifier:
+            user = User.query.filter_by(email=identifier.strip().lower()).first()
+        else:
+            user = User.query.filter_by(username=identifier.strip()).first()
         
         if user and check_password_hash(user.hashed_password, password):
             return user, "Login successful"
             
-        return None, "Invalid email or password"
+        return None, "Invalid credentials"

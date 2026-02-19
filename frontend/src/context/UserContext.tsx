@@ -123,7 +123,11 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             environment_pref: s4.environment,
             focus_threshold: focusThreshold,
             place_of_study: s4.environment,
-            study_mode: s4.approach
+            study_mode: s4.approach,
+
+            // Fix: Include Step 3 Data (Blueprint)
+            base_template: step3Data.selectedBlueprint,
+            selectedBlueprint: step3Data.selectedBlueprint // Send both just in case
         };
 
         try {

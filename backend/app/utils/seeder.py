@@ -1,5 +1,5 @@
 from app import create_app, db
-from app.models.course import Course, StudyKnowledge
+from app.models.course import Course, StudyKnowledge, StudyTemplate
 
 app = create_app()
 
@@ -73,6 +73,41 @@ def seed_courses():
         if not Course.query.filter_by(code=c_data['code']).first():
             db.session.add(Course(**c_data))
             print(f"Added Course: {c_data['code']}")
+
+    # 2. Seed Base Templates (Structural Logic for the Inference Engine)
+    templates = [
+        {
+            "name": "Deep Work",
+            "description": "High-intensity focus on cognitively demanding tasks.",
+            "session_length": 120,
+            "break_length": 20,
+            "daily_block_cap": 2,
+            "logic_source": "Cal Newport (2016)",
+            "ideal_for": "High complexity courses (Weight 4-5)"
+        },
+        {
+            "name": "Pomodoro",
+            "description": "Timed intervals to maintain focus and prevent burnout.",
+            "session_length": 25,
+            "break_length": 5,
+            "daily_block_cap": 8,
+            "logic_source": "Francesco Cirillo (1980s)",
+            "ideal_for": "Process & methodology courses (Weight 1-2)"
+        },
+        {
+            "name": "Active Recall",
+            "description": "Retrieval practice focused on factual and core fundamentals.",
+            "session_length": 45,
+            "break_length": 15,
+            "daily_block_cap": 4,
+            "logic_source": "Dunlosky et al. (2013)",
+            "ideal_for": "Core fundamentals (Weight 3)"
+        }
+    ]
+
+    for t_data in templates:
+        if not StudyTemplate.query.filter_by(name=t_data['name']).first():
+            db.session.add(StudyTemplate(**t_data))
 
     # --- Seed Knowledge Base for Inference (Expert System Rules) ---
     tips = [

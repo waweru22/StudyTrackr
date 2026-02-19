@@ -39,8 +39,56 @@ def get_notes():
         "title": n.title,
         "content": n.content,
         "course_id": n.course_id,
-        "last_edited": n.last_edited
+        "created_at": n.created_at,
+        "last_edited": n.last_edited,
+        "file_path": n.file_path,
+        "file_type": n.file_type
     } for n in notes]), 200
+
+@note_bp.route('/upload', methods=['POST'])
+@jwt_required()
+def upload_note_file():
+    user_id = int(get_jwt_identity())
+    
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+        
+    file = request.files['file']
+    title = request.form.get('title', 'Untitled Upload')
+    
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+        
+    if file and (file.filename.endswith('.pdf') or file.filename.endswith('.pptx') or file.filename.endswith('.ppt')):
+        import os
+        from werkzeug.utils import secure_filename
+        from flask import current_app
+        
+        filename = secure_filename(file.filename)
+        # Ensure upload folder exists
+        upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
+        if not os.path.exists(upload_folder):
+            os.makedirs(upload_folder)
+            
+        save_path = os.path.join(upload_folder, filename)
+        file.save(save_path)
+        
+        # Determine type
+        ftype = 'pdf' if filename.endswith('.pdf') else 'pptx'
+        
+        note = Note(
+            user_id=user_id,
+            title=title,
+            content=f"File upload: {filename}",
+            file_path=filename,
+            file_type=ftype
+        )
+        db.session.add(note)
+        db.session.commit()
+        
+        return jsonify({"message": "File uploaded", "id": note.id, "file_url": filename}), 201
+        
+    return jsonify({"error": "Invalid file type. Only PDF and PPTX allowed."}), 400
 
 @note_bp.route('/<int:note_id>', methods=['PUT'])
 @jwt_required()
@@ -68,5 +116,14 @@ def delete_note(note_id):
         return jsonify({"error": "Note not found"}), 404
         
     db.session.delete(note)
-    db.session.commit()
-    return jsonify({"message": "Note deleted"}), 200
+@note_bp.route('/file/<filename>', methods=['GET'])
+def serve_note_file(filename):
+    from flask import send_from_directory, current_app, abort
+    import os
+    
+    upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
+    try:
+        return send_from_directory(upload_folder, filename)
+    except FileNotFoundError:
+        abort(404)
+

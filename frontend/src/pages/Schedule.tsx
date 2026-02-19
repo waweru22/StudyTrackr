@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { api } from '../api/client';
 import { useUser } from '../context/UserContext';
+import SessionModal from '../components/SessionModal';
 import type { ScheduleData, SessionBlock } from '../types';
 
 // --- Icons ---
@@ -191,18 +193,30 @@ const CourseLabel = styled.span`
 
 // --- Interactive Session Card ---
 
-const SessionCard = ({ session, onStart, onComplete }: { session: SessionBlock, onStart: (id: number) => void, onComplete: (id: number) => void }) => {
+const SessionCard = ({ session, onStart }: { session: SessionBlock, onStart: (block: SessionBlock) => void }) => {
     const [expanded, setExpanded] = useState(false);
     const isCompleted = session.status === 'completed';
     const isActive = session.status === 'active';
+
+    // Calculate duration display
+    const startTimeParts = session.start_time.split(':');
+    const endTimeParts = session.end_time.split(':');
+    const startMin = parseInt(startTimeParts[0]) * 60 + parseInt(startTimeParts[1]);
+    const endMin = parseInt(endTimeParts[0]) * 60 + parseInt(endTimeParts[1]);
+    const duration = endMin - startMin;
 
     return (
         <div className={`bg-white rounded-xl p-5 border border-gray-100 shadow-sm transition-all duration-300 ${isCompleted ? 'opacity-60 grayscale-[0.5]' : 'hover:shadow-md'} ${isActive ? 'ring-2 ring-indigo-500 border-transparent' : ''}`}>
             <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center space-x-3">
-                    <span className="text-sm font-bold text-gray-500 font-mono">
-                        {session.start_time.slice(0, 5)}
-                    </span>
+                    <div className="flex flex-col">
+                        <span className="text-sm font-bold text-gray-500 font-mono">
+                            {session.start_time.slice(0, 5)} - {session.end_time.slice(0, 5)}
+                        </span>
+                        <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+                            {duration} min
+                        </span>
+                    </div>
                     {isActive && (
                         <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700 uppercase tracking-wide animate-pulse">
                             Active
@@ -269,16 +283,13 @@ const SessionCard = ({ session, onStart, onComplete }: { session: SessionBlock, 
                         <span className="text-sm">Completed</span>
                     </div>
                 ) : isActive ? (
-                    <button
-                        onClick={() => onComplete(session.id)}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center space-x-2 shadow-sm"
-                    >
-                        <span>Finish Session</span>
-                    </button>
+                    <div className="w-full flex items-center justify-center text-blue-600 font-bold space-x-2 py-2.5 bg-blue-50 rounded-lg animate-pulse">
+                        <span className="text-sm">Session In Progress...</span>
+                    </div>
                 ) : (
                     <button
-                        onClick={() => onStart(session.id)}
-                        className="w-full bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                        onClick={() => onStart(session)}
+                        className="w-full bg-blue-800 hover:bg-blue-900 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center space-x-2"
                     >
                         <span>Start Session</span>
                     </button>
@@ -292,9 +303,11 @@ const SessionCard = ({ session, onStart, onComplete }: { session: SessionBlock, 
 // --- Main Schedule Component ---
 
 const Schedule: React.FC = () => {
+    const navigate = useNavigate();
     const { user, semester } = useUser(); // Using UserContext data
     const [schedule, setSchedule] = useState<ScheduleData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [selectedSession, setSelectedSession] = useState<SessionBlock | null>(null);
 
     useEffect(() => {
         const fetchSchedule = async () => {
@@ -310,33 +323,36 @@ const Schedule: React.FC = () => {
         fetchSchedule();
     }, []);
 
-    const handleComplete = async (block_id: number) => {
-        // Optimistic UI update
-        if (!schedule) return;
 
-        const updatedToday = schedule.today_blocks.map(b =>
-            b.id === block_id ? { ...b, status: 'completed' as const } : b
-        );
-        setSchedule({ ...schedule, today_blocks: updatedToday });
 
-        try {
-            await api.post(`/schedule/${block_id}/complete`, {});
-        } catch (error) {
-            console.error("Failed to complete session", error);
-        }
-    };
+    const handleStart = async (block: SessionBlock) => {
+        setSelectedSession(block);
 
-    const handleStart = async (block_id: number) => {
         if (!schedule) return;
 
         // Optimistic UI
         const updatedToday = schedule.today_blocks.map(b =>
-            b.id === block_id ? { ...b, status: 'active' as const } : b
+            b.id === block.id ? { ...b, status: 'active' as const } : b
         );
         setSchedule({ ...schedule, today_blocks: updatedToday });
 
         try {
-            await api.post(`/schedule/${block_id}/start`, {});
+            await api.post(`/schedule/${block.id}/start`, {});
+
+            // Navigate to timer
+            const session = schedule.today_blocks.find(b => b.id === block.id);
+            if (session) {
+                navigate('/session-timer', {
+                    state: {
+                        courseName: session.course_title,
+                        courseCode: session.course_code,
+                        durationMinutes: session.duration_minutes,
+                        technique: session.technique_name || 'Standard',
+                        goal: session.technique_details || 'Focus',
+                        sessionId: session.id
+                    }
+                });
+            }
         } catch (error) {
             console.error("Failed to start session", error);
         }
@@ -369,8 +385,25 @@ const Schedule: React.FC = () => {
     const level = user?.level || '100';
     const avatarSrc = `https://ui-avatars.com/api/?name=${username}&background=random&color=fff&background=4F46E5`;
 
-    // Define day order for the week grid
-    const dayOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    // Helper to determine day status
+    const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    // Helper to determine day status
+    const getDayStatus = (dayName: string) => {
+        const todayIndex = new Date().getDay(); // 0=Sun, 1=Mon...
+        // Map "Monday" -> 1, "Sunday" -> 0 to match getDay()
+        const dayMap: { [key: string]: number } = { "Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, "Friday": 5, "Saturday": 6 };
+
+        const currentDayIndex = dayMap[dayName];
+
+        // Adjust for Sunday being 0 but usually end of week in display (Mon=1 ... Sun=7)
+        const todayAdjusted = todayIndex === 0 ? 7 : todayIndex;
+        const currentAdjusted = currentDayIndex === 0 ? 7 : currentDayIndex;
+
+        if (currentAdjusted < todayAdjusted) return 'past';
+        if (currentAdjusted === todayAdjusted) return 'today';
+        return 'future';
+    };
 
     return (
         <LayoutContainer>
@@ -406,7 +439,6 @@ const Schedule: React.FC = () => {
                                 key={block.id}
                                 session={block}
                                 onStart={handleStart}
-                                onComplete={handleComplete}
                             />
                         ))
                     )}
@@ -419,33 +451,59 @@ const Schedule: React.FC = () => {
                     </InsightText>
 
                     <WeekGrid>
-                        {dayOrder.map(day => (
-                            <DayCard key={day}>
-                                <DayHeader>{day.slice(0, 3)}</DayHeader>
-                                <Timeline>
-                                    {weekly_summary[day]?.length > 0 ? (
-                                        weekly_summary[day].map((b, idx) => (
-                                            <TimelineItem key={`${day}-${idx}`}>
-                                                <Dot />
-                                                <TimeLabel>{b.start_time.slice(0, 5)}</TimeLabel>
-                                                <CourseLabel>{b.course_code}</CourseLabel>
-                                                {b.technique_name && (
-                                                    <span className="text-[10px] text-indigo-500 font-medium">
-                                                        {b.technique_name.split(' ')[0]}
-                                                    </span>
-                                                )}
-                                            </TimelineItem>
-                                        ))
-                                    ) : (
-                                        <span className="text-xs text-gray-300 italic">Rest day</span>
-                                    )}
-                                </Timeline>
-                            </DayCard>
-                        ))}
+                        {dayOrder.map(day => {
+                            const status = getDayStatus(day);
+                            const isPast = status === 'past';
+                            const isToday = status === 'today';
+
+                            return (
+                                <DayCard
+                                    key={day}
+                                    style={{
+                                        opacity: isPast ? 0.6 : 1,
+                                        filter: isPast ? 'grayscale(100%)' : 'none',
+                                        backgroundColor: isPast ? '#F8FAFC' : 'white',
+                                        borderColor: isToday ? '#4F46E5' : '#E2E8F0',
+                                        borderWidth: isToday ? '2px' : '1px',
+                                        boxShadow: isToday ? '0 4px 6px -1px rgba(79, 70, 229, 0.1), 0 2px 4px -1px rgba(79, 70, 229, 0.06)' : 'none'
+                                    }}
+                                >
+                                    <DayHeader style={{ color: isToday ? '#4F46E5' : 'inherit' }}>
+                                        {day.slice(0, 3)}
+                                        {isToday && <span className="ml-2 text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">TODAY</span>}
+                                    </DayHeader>
+                                    <Timeline>
+                                        {weekly_summary[day]?.length > 0 ? (
+                                            weekly_summary[day].map((b, idx) => (
+                                                <TimelineItem key={`${day}-${idx}`}>
+                                                    <Dot style={{ backgroundColor: isToday ? '#6366F1' : '#CBD5E1' }} />
+                                                    <div className="flex flex-col">
+                                                        <TimeLabel>{b.start_time}-{b.end_time || '?'}</TimeLabel>
+                                                        <CourseLabel>{b.course_code}</CourseLabel>
+                                                    </div>
+                                                    {b.technique_name && (
+                                                        <span className="text-[10px] text-indigo-500 font-medium truncate max-w-[80px]" title={b.technique_name}>
+                                                            {b.technique_name}
+                                                        </span>
+                                                    )}
+                                                </TimelineItem>
+                                            ))
+                                        ) : (
+                                            <span className="text-xs text-gray-300 italic">Rest day</span>
+                                        )}
+                                    </Timeline>
+                                </DayCard>
+                            );
+                        })}
                     </WeekGrid>
                 </WeekSection>
             </MainContent>
-        </LayoutContainer>
+            <SessionModal
+                isOpen={!!selectedSession}
+                onClose={() => setSelectedSession(null)}
+                session={selectedSession}
+            />
+        </LayoutContainer >
     );
 };
 

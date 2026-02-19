@@ -16,28 +16,34 @@ import Login from './pages/Login';
 import VerifyOTP from './pages/VerifyOTP';
 import SessionTimer from './pages/SessionTimer';
 import { UserProvider } from './context/UserContext';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
     <UserProvider>
       <Router>
         <Routes>
+          {/* Public Routes */}
           <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/onboarding/step-2" element={<OnboardingStep2 />} />
           <Route path="/onboarding/step-3" element={<OnboardingStep3 />} />
           <Route path="/onboarding/step-4" element={<OnboardingStep4 />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/schedule" element={<Schedule />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/tips" element={<StudyTips />} />
-          <Route path="/materials" element={<Materials />} />
-          <Route path="/notes" element={<Notes />} />
-          <Route path="/help" element={<Help />} />
-          <Route path="/session-timer" element={<SessionTimer />} />
-          <Route path="/login" element={<Login />} />
           <Route path="/verify-otp" element={<VerifyOTP />} />
+          <Route path="/help" element={<Help />} />
+
+          {/* Protected Routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/schedule" element={<Schedule />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/tips" element={<StudyTips />} />
+            <Route path="/materials" element={<Materials />} />
+            <Route path="/notes" element={<Notes />} />
+            <Route path="/session-timer" element={<SessionTimer />} />
+          </Route>
         </Routes>
       </Router>
     </UserProvider>

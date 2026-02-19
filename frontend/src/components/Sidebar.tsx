@@ -21,8 +21,8 @@ const Sidebar: React.FC = () => {
     ];
 
     const handleSignOut = () => {
-        // Clear auth state here (e.g., localStorage.clear())
-        // For now, simple navigation back to landing page
+        // Clear auth state
+        localStorage.removeItem('token');
         navigate('/');
     };
 

@@ -109,7 +109,7 @@ const Dashboard: React.FC = () => {
                                             {dashboardData?.next_session?.time && dashboardData.next_session.time !== "N/A" && (
                                                 <span className="flex items-center"><Clock size={14} className="mr-1" /> {dashboardData.next_session.time}</span>
                                             )}
-                                            <span className="flex items-center"><Brain size={14} className="mr-1" /> Deep Work</span>
+                                            <span className="flex items-center"><Brain size={14} className="mr-1" /> {dashboardData?.next_session?.technique || "Deep Work"}</span>
                                             <span className="flex items-center"><User size={14} className="mr-1" /> Individual</span>
                                         </div>
                                     </div>

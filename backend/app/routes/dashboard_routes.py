@@ -21,8 +21,11 @@ def get_dashboard():
     
     # Next session
     # Next session: Must be (Today AND > Current Time) OR (Future Date)
-    today = datetime.utcnow().date()
-    current_time = datetime.utcnow().time()
+    from datetime import timezone, timedelta
+    LAGOS_TZ = timezone(timedelta(hours=1))
+    now_lagos = datetime.now(LAGOS_TZ)
+    today = now_lagos.date()
+    current_time = now_lagos.time()
     
     # Logic: 
     # 1. Check for sessions LATER TODAY
@@ -85,7 +88,8 @@ def get_dashboard():
         "xp": user.xp_points,
         "next_session": {
             "course": next_session.course.code if next_session and next_session.course else "None",
-            "time": str(next_session.start_time) if next_session else "N/A"
+            "time": str(next_session.start_time.strftime("%I:%M%p").lower()) if next_session else "N/A",
+            "technique": next_session.technique_name if next_session else "General Study"
         },
         "quote": random.choice(quotes),
         "feed": feed,

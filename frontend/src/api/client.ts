@@ -12,9 +12,13 @@ export async function apiRequest<T>(endpoint: string, options: RequestOptions = 
     const token = localStorage.getItem('token');
 
     const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
         ...options.headers,
     };
+
+    // Only set JSON content type if not FormData and not explicitly set
+    if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+    }
 
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
@@ -26,7 +30,7 @@ export async function apiRequest<T>(endpoint: string, options: RequestOptions = 
     };
 
     if (options.body) {
-        config.body = JSON.stringify(options.body);
+        config.body = options.body instanceof FormData ? options.body : JSON.stringify(options.body);
     }
 
     const response = await fetch(`${BASE_URL}${endpoint}`, config);

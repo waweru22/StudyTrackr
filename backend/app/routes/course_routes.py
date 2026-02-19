@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required
 from app.models.course import Course
 
 course_bp = Blueprint('course', __name__)
@@ -28,16 +29,30 @@ def get_courses():
     # Current behavior is to filter if param exists.
             
     courses = query.order_by(Course.code.asc()).all()
+@course_bp.route('/my_courses', methods=['GET'])
+@jwt_required()
+def get_my_courses():
+    from flask_jwt_extended import get_jwt_identity
+    from app.models.user import User
+    
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+        
+    # Return user's enrolled courses
+    courses = user.courses
     
     return jsonify([{
         'id': c.id,
         'code': c.code,
         'name': c.name,
-        'credits': c.credits,
         'level': c.level,
-        'semester': c.semester,
-        'weight': c.weight
+        'weight': c.weight,
+        'credits': c.credits
     } for c in courses]), 200
+
 
 @course_bp.route('/all', methods=['GET'])
 def get_all_courses():

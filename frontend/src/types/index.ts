@@ -48,6 +48,7 @@ export interface SessionBlock {
     technique_details?: string;
     refinement_reason?: string;
     academic_citation?: string;
+    duration_minutes: number;
 }
 
 export interface WeeklyBlock {
@@ -55,7 +56,8 @@ export interface WeeklyBlock {
     course_code: string;
     start_time: string;
     technique_name?: string;
-    color_theme?: string; // Added
+    color_theme?: string;
+    end_time?: string;
 }
 
 export interface ScheduleData {
@@ -88,4 +90,22 @@ export interface UserProfile {
     badge: string;
     streak_count: number;
     base_template?: string;
+}
+
+export interface Material {
+    id: number;
+    title: string;
+    url: string;
+    type: 'video' | 'article' | 'journal' | 'textbook';
+    tag?: string;
+    difficulty?: number;
+}
+
+export interface EnrolledCourse {
+    id: number;
+    code: string;
+    name: string;
+    level: number;
+    weight: number;
+    credits: number;
 }

@@ -3,10 +3,12 @@ import { ArrowRight, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { useUser } from '../context/UserContext';
 
 const Login: React.FC = () => {
     const navigate = useNavigate();
-    const [email, setEmail] = useState('');
+    const { fetchUser } = useUser();
+    const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
@@ -19,19 +21,21 @@ const Login: React.FC = () => {
 
         try {
             const response = await api.post<{ access_token: string, message: string }>('/auth/login', {
-                email,
+                identifier,
                 password
             });
 
             // Store token
             if (response.access_token) {
                 localStorage.setItem('token', response.access_token);
+                // Sync user state immediately 
+                await fetchUser();
                 // navigate to dashboard
                 navigate('/dashboard');
             }
         } catch (err: any) {
             console.error("Login failed", err);
-            setError(err.response?.data?.error || "Invalid email or password.");
+            setError(err.response?.data?.error || "Invalid credentials.");
         } finally {
             setLoading(false);
         }
@@ -55,17 +59,17 @@ const Login: React.FC = () => {
 
                 {/* Form */}
                 <form className="space-y-6" onSubmit={handleLogin}>
-                    {/* Email */}
+                    {/* Identifier */}
                     <div className="space-y-1.5">
                         <label className="block text-sm font-medium font-dm-sans text-gray-700">
-                            Email address
+                            Username or Email
                         </label>
                         <input
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            type="text"
+                            value={identifier}
+                            onChange={(e) => setIdentifier(e.target.value)}
                             required
-                            placeholder="e.g. name@nileuniversity.edu.ng"
+                            placeholder="e.g. waweru22 or name@email.com"
                             className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400 text-sm transition-shadow shadow-sm"
                         />
                     </div>
@@ -100,27 +104,24 @@ const Login: React.FC = () => {
                         </div>
                     )}
 
-                    <div className="pt-2">
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full flex items-center justify-center space-x-2 bg-blue-800 hover:bg-blue-900 text-white font-semibold font-dm-sans text-base py-3.5 rounded-lg shadow-sm transition-all transform active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed"
-                        >
-                            {loading ? (
-                                <span>Signing In...</span>
-                            ) : (
-                                <>
-                                    <span>Sign In</span>
-                                    <ArrowRight size={18} />
-                                </>
-                            )}
-                        </button>
-                    </div>
+                    <button
+                        type="submit"
+                        disabled={loading}
+                        className={`w-full flex items-center justify-center space-x-2 font-semibold py-3.5 rounded-lg shadow-sm transition-all transform active:scale-[0.99] text-sm text-white ${loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-800 hover:bg-blue-900'}`}
+                    >
+                        {loading ? 'Signing in...' : 'Log In'}
+                        {!loading && <ArrowRight size={18} />}
+                    </button>
                 </form>
 
-                <p className="mt-8 text-center text-sm font-light font-dm-sans text-gray-500">
-                    Don't have an account? <Link to="/onboarding" className="text-blue-700 font-medium font-dm-sans hover:underline">Create Account</Link>
-                </p>
+                <div className="mt-8 text-center">
+                    <p className="text-sm text-gray-500">
+                        Don't have an account?{' '}
+                        <Link to="/onboarding" className="font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                            Sign Up
+                        </Link>
+                    </p>
+                </div>
             </main>
         </div>
     );

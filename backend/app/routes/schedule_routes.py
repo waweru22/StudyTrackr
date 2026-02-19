@@ -14,9 +14,10 @@ def get_schedule():
     from app.services.schedule_service import ScheduleService
     # ScheduleService.check_missed_sessions(user_id) # Simplify for now
     
-    # 2. Get Today's Schedule
-    from datetime import datetime, date
-    today = datetime.utcnow().date()
+    # 2. Get Today's Schedule (Lagos Time)
+    from datetime import datetime, date, timezone, timedelta
+    LAGOS_TZ = timezone(timedelta(hours=1))
+    today = datetime.now(LAGOS_TZ).date()
     
     # 3. Inference-First: If no schedule, generate it
     # Check if we have any blocks from today onwards
@@ -32,8 +33,9 @@ def get_schedule():
     from app.models.session import StudySession
     
     # Get all sessions for today to map to blocks (Status Sync)
-    start_of_day = datetime.combine(today, datetime.min.time())
-    end_of_day = datetime.combine(today, datetime.max.time())
+    # Get all sessions for today to map to blocks (Status Sync)
+    start_of_day = datetime.combine(today, datetime.min.time()).replace(tzinfo=LAGOS_TZ)
+    end_of_day = datetime.combine(today, datetime.max.time()).replace(tzinfo=LAGOS_TZ)
     todays_sessions = StudySession.query.filter(
         StudySession.user_id == user_id,
         StudySession.start_time >= start_of_day,
@@ -71,18 +73,31 @@ def get_schedule():
             "color_theme": get_theme(block.course.code if block.course else "General")
         })
         
-    # 5. Get Weekly Summary (Next 6 days)
-    tomorrow = today + timedelta(days=1)
-    end_of_week = today + timedelta(days=6)
+    # 5. Get Weekly Summary (Current Week - including Today)
+    # We want to show the full week (or at least from today onwards correctly)
+    # Actually, for a "Weekly View" effectively acting as a calendar, users often want to see Mon-Sun.
+    # But usually "Upcoming" implies future. However, based on the issue "today... does not match", 
+    # it implies the user sees the Weekly Grid and expects Today's column to be filled.
     
-    future_blocks = ScheduleBlock.query.filter(
+    # Let's fetch from start of current week (Monday) to end of week (Sunday)
+    # OR just fetch from Today onwards and ensure Today is included.
+    # Since the frontend renders a fixed Mon-Sun grid, we should probably return the whole week's data if possible,
+    # or at least ensuring 'today' is in there.
+    
+    # Let's align with the user request: "today... does not match...". 
+    # If we only send tomorrow+, today is empty in the grid.
+    
+    start_of_week = today - timedelta(days=today.weekday()) # Monday
+    end_of_week = start_of_week + timedelta(days=6) # Sunday
+    
+    week_blocks = ScheduleBlock.query.filter(
         ScheduleBlock.user_id == user_id,
-        ScheduleBlock.date >= tomorrow,
+        ScheduleBlock.date >= start_of_week,
         ScheduleBlock.date <= end_of_week
     ).order_by(ScheduleBlock.date.asc(), ScheduleBlock.start_time.asc()).all()
     
     weekly_summary = {}
-    for block in future_blocks:
+    for block in week_blocks:
         day_name = block.date.strftime("%A")
         if day_name not in weekly_summary:
             weekly_summary[day_name] = []
@@ -91,8 +106,10 @@ def get_schedule():
             "id": block.id,
             "course_code": block.course.code if block.course else "General",
             "start_time": block.start_time.strftime("%H:%M"),
+            "end_time": block.end_time.strftime("%H:%M"), # Added end_time
             "technique_name": block.technique_name,
-            "color_theme": get_theme(block.course.code if block.course else "General") # Visual Consistency
+            "block_type": block.block_type,
+            "color_theme": get_theme(block.course.code if block.course else "General")
         })
         
     return jsonify({
@@ -145,3 +162,27 @@ def complete_block(block_id):
     db.session.commit()
     
     return jsonify({"message": "Block marked as completed", "status": "completed"}), 200
+
+@schedule_bp.route('/debug/all', methods=['GET'])
+def debug_all_schedules():
+    """
+    Debug Endpoint: Retrieve all schedule blocks to verify persistence.
+    Public access (Dev use only).
+    """
+    blocks = ScheduleBlock.query.order_by(ScheduleBlock.date.asc(), ScheduleBlock.start_time.asc()).all()
+    
+    results = []
+    for b in blocks:
+        results.append({
+            "id": b.id,
+            "user_id": b.user_id,
+            "course_id": b.course_id,
+            "date": b.date.isoformat() if b.date else None,
+            "start_time": b.start_time.strftime("%H:%M:%S"),
+            "end_time": b.end_time.strftime("%H:%M:%S"),
+            "block_type": b.block_type,
+            "technique_name": b.technique_name,
+            "status": b.status
+        })
+        
+    return jsonify(results), 200

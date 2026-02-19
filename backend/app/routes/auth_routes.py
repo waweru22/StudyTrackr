@@ -11,10 +11,14 @@ auth_bp = Blueprint('auth', __name__)
 @auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
-    email = data.get('email', '').strip().lower()
+    identifier = data.get('identifier', '').strip()
+    if not identifier:
+         # Fallback for legacy frontend that might still send 'email'
+         identifier = data.get('email', '').strip().lower()
+         
     password = data.get('password')
     
-    user, message = AuthService.login_user(email, password)
+    user, message = AuthService.login_user(identifier, password)
     
     if user:
         token = create_access_token(identity=str(user.id))
@@ -120,8 +124,10 @@ def onboard():
         # Pass IDs explicitly as requested
         sched_result = InferenceService.generate_week_schedule(user.id, selected_course_ids=course_ids)
         if sched_result and "No courses" in sched_result:
-             db.session.rollback()
-             return jsonify({"error": sched_result}), 400
+             # Non-fatal error: Schedule empty, but User created.
+             print(f"Warning: {sched_result}")
+             # db.session.rollback() -> REMOVED to allow OTP
+             # return jsonify({"error": sched_result}), 400 -> REMOVED
 
         # 4. Trigger OTP Email
         AuthService.generate_otp(user.email)

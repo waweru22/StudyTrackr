@@ -19,3 +19,6 @@ class Config:
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_USER') or os.environ.get('MAIL_USERNAME')
+    
+    # File Uploads
+    UPLOAD_FOLDER = os.path.join(basedir, 'uploads')

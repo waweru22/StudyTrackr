@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Battery, BatteryMedium, BatteryLow, User, Users, Eye, Ear, NotebookPen, Book, Laptop, Tablet, Smartphone, LayoutGrid } from 'lucide-react';
+import type { SessionBlock } from '../types';
 
 interface SessionModalProps {
     isOpen: boolean;
     onClose: () => void;
+    session: SessionBlock | null;
 }
 
-const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose }) => {
+const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose, session }) => {
     const navigate = useNavigate();
     const [vibe, setVibe] = useState('');
     const [social, setSocial] = useState('');
@@ -17,6 +19,10 @@ const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose }) => {
     const [otherEnvironment, setOtherEnvironment] = useState('');
     const [goal, setGoal] = useState('');
     const [error, setError] = useState('');
+
+    const [pomoLoops, setPomoLoops] = useState(4); // Default 4 loops (2 hours)
+
+    const isPomodoro = session?.technique_name?.toLowerCase().includes('pomodoro');
 
     const handleStart = () => {
         if (!vibe) {
@@ -43,9 +49,33 @@ const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose }) => {
             setError('Please specify your environment.');
             return;
         }
+
+        // Calculate duration and pass to timer
+        let durationMinutes = 60; // Default
+
+        if (isPomodoro) {
+            // 25 min focus + 5 min break = 30 mins per loop
+            durationMinutes = pomoLoops * 30;
+        } else if (session) {
+            const startTimeParts = session.start_time.split(':');
+            const endTimeParts = session.end_time.split(':');
+            const startMin = parseInt(startTimeParts[0]) * 60 + parseInt(startTimeParts[1]);
+            const endMin = parseInt(endTimeParts[0]) * 60 + parseInt(endTimeParts[1]);
+            durationMinutes = endMin - startMin;
+        }
+
         // Proceed with session start
         onClose();
-        navigate('/session-timer');
+        navigate('/session-timer', {
+            state: {
+                courseName: session?.course_title || 'General Study',
+                courseCode: session?.course_code || 'STUDY',
+                durationMinutes: durationMinutes,
+                technique: session?.technique_name || 'Standard',
+                goal: goal || 'Focus on material',
+                pomoLoops: isPomodoro ? pomoLoops : undefined
+            }
+        });
     };
 
     if (!isOpen) return null;
@@ -59,7 +89,7 @@ const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose }) => {
                         <div>
                             <h2 className="text-xl font-bold text-gray-900">Set the Scene</h2>
                             <p className="text-sm text-gray-500 mt-1">
-                                Help the AI understand your current conditions to optimize your next session.
+                                {session ? `Preparing for ${session.course_code}: ${session.technique_name}` : 'Help the AI understand your current conditions.'}
                             </p>
                         </div>
                         <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors">
@@ -70,6 +100,30 @@ const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose }) => {
 
                 {/* Scrollable Content */}
                 <div className="p-6 space-y-6">
+
+                    {/* Pomodoro Specific Setting */}
+                    {isPomodoro && (
+                        <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+                            <h3 className="text-sm font-bold text-red-900 mb-2">Pomodoro Cycles</h3>
+                            <div className="flex items-center justify-between">
+                                <div className="text-xs text-red-700">
+                                    <p>1 Cycle = 25m Focus + 5m Break</p>
+                                    <p className="font-bold mt-1">Total Duration: {pomoLoops * 30} Minutes</p>
+                                </div>
+                                <div className="flex items-center space-x-3 bg-white px-3 py-1.5 rounded-lg border border-red-100 shadow-sm">
+                                    <button
+                                        onClick={() => setPomoLoops(Math.max(1, pomoLoops - 1))}
+                                        className="text-red-600 font-bold hover:bg-red-50 w-6 h-6 rounded flex items-center justify-center"
+                                    >-</button>
+                                    <span className="text-red-900 font-mono font-bold">{pomoLoops}</span>
+                                    <button
+                                        onClick={() => setPomoLoops(Math.min(10, pomoLoops + 1))}
+                                        className="text-red-600 font-bold hover:bg-red-50 w-6 h-6 rounded flex items-center justify-center"
+                                    >+</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Current Vibe */}
                     <div>

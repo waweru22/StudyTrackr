@@ -25,7 +25,13 @@ def create_app(config_class=Config):
         "http://localhost:5174", "http://127.0.0.1:5174",
         "http://localhost:5175", "http://127.0.0.1:5175"
     ]
-    CORS(app, resources={r"/*": {"origins": allowed_origins}}, supports_credentials=True)
+    CORS(app, resources={
+        r"/*": {
+            "origins": allowed_origins,
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"]
+        }
+    }, supports_credentials=True)
 
     # Register blueprints 
     from app.routes.auth_routes import auth_bp
@@ -38,6 +44,7 @@ def create_app(config_class=Config):
     from app.routes.knowledge_routes import knowledge_bp
     from app.routes.course_routes import course_bp
     from app.routes.user_routes import user_bp
+    from app.routes.material_routes import material_bp
 
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(dashboard_bp, url_prefix='/dashboard')
@@ -49,6 +56,7 @@ def create_app(config_class=Config):
     app.register_blueprint(audit_bp, url_prefix='/audit')
     app.register_blueprint(course_bp, url_prefix='/courses')
     app.register_blueprint(user_bp, url_prefix='/users')
+    app.register_blueprint(material_bp, url_prefix='/materials')
     
     from app.routes.admin_routes import admin_bp
     app.register_blueprint(admin_bp, url_prefix='/admin')

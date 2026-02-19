@@ -16,7 +16,7 @@ interface Course {
 
 const OnboardingStep2: React.FC = () => {
     const navigate = useNavigate();
-    const { level, step2Data, setStep2Data, setSemester } = useUser();
+    const { level, step1Data, step2Data, setStep2Data, setSemester } = useUser();
 
     // Local State
     const [selectedSemester, setSelectedSemester] = useState<'harmattan' | 'rain'>(step2Data.selectedSemester || 'harmattan');
@@ -26,7 +26,8 @@ const OnboardingStep2: React.FC = () => {
     const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
     const [loading, setLoading] = useState(false);
 
-    const userLevel = parseInt(level) || 100; // Default to 100 if parsing fails
+    // Fix: Use step1Data.level (fresh form data) instead of legacy 'level' context
+    const userLevel = parseInt(step1Data.level) || parseInt(level) || 100;
 
     // Fetch Courses from API
     useEffect(() => {
