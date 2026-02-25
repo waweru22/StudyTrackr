@@ -88,6 +88,24 @@ class AuthService:
                 
             role = data.get('role', 'student')
             staff_id = data.get('staff_id')
+            
+            # P1: Map focusDuration string values to integer minutes
+            focus_map = {
+                'short': 25,
+                'medium': 60,
+                'long': 110,
+            }
+            raw_focus = data.get('focusDuration') or data.get('focus_threshold')
+            mapped_focus = focus_map.get(raw_focus, 60) if raw_focus in focus_map else 60
+            print(f"  focus input received: {raw_focus} → mapped to: {mapped_focus}", flush=True)
+            
+            # P3: Derive daily_cognitive_budget from focusDuration
+            budget_map = {
+                'short': 2,
+                'medium': 3,
+                'long': 4,
+            }
+            mapped_budget = budget_map.get(raw_focus, 3)
                 
             new_user = User(
                 username=data.get('username'),
@@ -96,14 +114,14 @@ class AuthService:
                 level=data.get('level', 100),
                 role=role,
                 staff_id=staff_id,
-                learning_style=data.get('learning_style', 'Unknown'),
-                peak_time=data.get('peak_time'),
-                # Fix: Frontend sends 'selectedBlueprint' (Step 3), Model expects 'base_template'
+                learning_style=data.get('learningStyle') or data.get('learning_style', 'Unknown'),
+                peak_time=data.get('peakTime') or data.get('peak_time'),
                 base_template=data.get('selectedBlueprint') or data.get('base_template'),
-                environment_pref=data.get('environment_pref'),
-                focus_threshold=data.get('focus_threshold', 60),
-                preferred_environment_v2=data.get('preferred_environment'),
-                study_mode=data.get('study_mode')
+                environment_pref=data.get('environment') or data.get('environment_pref'),
+                preferred_environment_v2=data.get('environment') or data.get('preferred_environment'),
+                study_mode=data.get('approach') or data.get('study_mode'),
+                focus_threshold=mapped_focus,
+                daily_cognitive_budget=mapped_budget,
             )
             
             # Add Courses with Level Mismatch Validation

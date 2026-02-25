@@ -54,7 +54,11 @@ def get_user_profile():
         'xp_points': user.xp_points,
         'badge': user.badge,
         'streak_count': user.streak_count,
-        'base_template': user.base_template
+        'base_template': user.base_template,
+        'peak_time': user.peak_time,
+        'focus_threshold': user.focus_threshold,
+        'learning_style': user.learning_style,
+        'daily_cognitive_budget': user.daily_cognitive_budget,
     }), 200
 
 @user_bp.route('/profile', methods=['PUT'])
@@ -84,3 +88,19 @@ def update_user_profile():
         'phone_number': user.phone_number,
         'level': user.level
     }}), 200
+
+@user_bp.route('/courses', methods=['GET'])
+@jwt_required()
+def get_user_courses():
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    return jsonify([{
+        'id': c.id,
+        'code': c.code,
+        'name': c.name,
+        'credits': c.credits,
+        'weight': c.weight
+    } for c in user.courses]), 200

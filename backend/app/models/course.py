@@ -1,4 +1,5 @@
 from app import db
+from datetime import datetime
 
 class UserCourse(db.Model):
     __tablename__ = 'user_courses'
@@ -26,15 +27,21 @@ class StudyKnowledge(db.Model):
     inference_trigger = db.Column(db.String(50)) # e.g., 'forgetting_curve'
     academic_source = db.Column(db.String(100))
     tags = db.Column(db.String(100)) # Comma-separated tags
+    rule_type = db.Column(db.String(20), default='schedule')  # 'schedule' or 'session'
+    student_instruction = db.Column(db.Text, nullable=True)
 
-class Material(db.Model):
+class SavedResource(db.Model):
+    __tablename__ = 'saved_resource'
     id = db.Column(db.Integer, primary_key=True)
-    course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     url = db.Column(db.String(500), nullable=False)
-    material_type = db.Column(db.String(50), nullable=False) # video, article, journal, textbook
-    learning_style_tag = db.Column(db.String(50)) # Visual, Aural, Read/Write
-    difficulty_level = db.Column(db.Integer) # 1-5
-    
-    # Relationship
-    course = db.relationship('Course', backref=db.backref('materials', lazy=True))
+    resource_type = db.Column(db.String(50), nullable=False)  # video, textbook
+    saved_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Unique constraint: one user can't save the same URL twice
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'url', name='uq_user_resource_url'),
+    )
+
+    user = db.relationship('User', backref=db.backref('saved_resources', lazy=True))

@@ -58,37 +58,52 @@ def upload_note_file():
     
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
+
+    allowed_extensions = ('.pdf', '.pptx', '.ppt', '.docx')
+    if not file or not file.filename.lower().endswith(allowed_extensions):
+        return jsonify({"error": "Invalid file type. Only PDF, PPTX, and DOCX allowed."}), 400
+
+    import os
+    from werkzeug.utils import secure_filename
+    from flask import current_app
+    
+    filename = secure_filename(file.filename)
+    upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
+    if not os.path.exists(upload_folder):
+        os.makedirs(upload_folder)
         
-    if file and (file.filename.endswith('.pdf') or file.filename.endswith('.pptx') or file.filename.endswith('.ppt')):
-        import os
-        from werkzeug.utils import secure_filename
-        from flask import current_app
-        
-        filename = secure_filename(file.filename)
-        # Ensure upload folder exists
-        upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
-        if not os.path.exists(upload_folder):
-            os.makedirs(upload_folder)
-            
-        save_path = os.path.join(upload_folder, filename)
-        file.save(save_path)
-        
-        # Determine type
-        ftype = 'pdf' if filename.endswith('.pdf') else 'pptx'
-        
-        note = Note(
-            user_id=user_id,
-            title=title,
-            content=f"File upload: {filename}",
-            file_path=filename,
-            file_type=ftype
-        )
-        db.session.add(note)
-        db.session.commit()
-        
-        return jsonify({"message": "File uploaded", "id": note.id, "file_url": filename}), 201
-        
-    return jsonify({"error": "Invalid file type. Only PDF and PPTX allowed."}), 400
+    save_path = os.path.join(upload_folder, filename)
+    file.save(save_path)
+    
+    # Convert non-PDF files to PDF using LibreOffice
+    if not filename.lower().endswith('.pdf'):
+        try:
+            from app.utils.file_converter import convert_to_pdf
+            pdf_path = convert_to_pdf(save_path, upload_folder)
+            # Delete the original file after successful conversion
+            os.remove(save_path)
+            filename = os.path.basename(pdf_path)
+            print(f"Converted to PDF: {filename}", flush=True)
+        except Exception as e:
+            # Clean up the uploaded file on failure
+            if os.path.exists(save_path):
+                os.remove(save_path)
+            print(f"LibreOffice conversion failed: {e}", flush=True)
+            return jsonify({
+                "error": "File conversion failed. Make sure LibreOffice is installed."
+            }), 500
+    
+    note = Note(
+        user_id=user_id,
+        title=title,
+        content=f"File upload: {filename}",
+        file_path=filename,
+        file_type='pdf'  # Always PDF after conversion
+    )
+    db.session.add(note)
+    db.session.commit()
+    
+    return jsonify({"message": "File uploaded", "id": note.id, "file_url": filename}), 201
 
 @note_bp.route('/<int:note_id>', methods=['PUT'])
 @jwt_required()
@@ -116,14 +131,31 @@ def delete_note(note_id):
         return jsonify({"error": "Note not found"}), 404
         
     db.session.delete(note)
+    db.session.commit()
+    return jsonify({"message": "Note deleted"}), 200
+
+# @note_bp.route('/file/<filename>', methods=['GET'])
+# def serve_note_file(filename):
+#     from flask import send_from_directory, current_app, abort
+#     import os
+    
+#     upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
+#     try:
+#         return send_from_directory(upload_folder, filename)
+#     except FileNotFoundError:
+#         abort(404)
+
 @note_bp.route('/file/<filename>', methods=['GET'])
 def serve_note_file(filename):
-    from flask import send_from_directory, current_app, abort
+    from flask import send_from_directory, current_app, abort, make_response
     import os
     
     upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
     try:
-        return send_from_directory(upload_folder, filename)
+        response = make_response(send_from_directory(upload_folder, filename, as_attachment=False))
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = 'inline'
+        return response
     except FileNotFoundError:
         abort(404)
 

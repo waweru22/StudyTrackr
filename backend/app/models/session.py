@@ -23,6 +23,12 @@ class StudySession(db.Model):
     start_time = db.Column(db.DateTime, default=datetime.utcnow)
     end_time = db.Column(db.DateTime)
     
+    # Post-session feedback fields
+    mood_after = db.Column(db.Integer, nullable=True)  # 1=Drained, 2=Neutral, 3=Energized
+    actual_duration_minutes = db.Column(db.Integer, nullable=True)
+    completed_on_time = db.Column(db.Boolean, nullable=True)
+    would_repeat = db.Column(db.Boolean, nullable=True)
+    
     # Relationships
     user = db.relationship('User', backref=db.backref('sessions', lazy=True))
     course = db.relationship('Course', backref=db.backref('sessions', lazy=True))
@@ -42,6 +48,11 @@ class ScheduleBlock(db.Model):
     status = db.Column(db.String(20), default='upcoming', nullable=False) # upcoming, completed, missed
     technique_name = db.Column(db.String(100), nullable=True, default='')
     technique_details = db.Column(db.Text, nullable=True, default='')
+
+    # Suggested study conditions (from user onboarding data)
+    suggested_environment = db.Column(db.String(100), nullable=True)
+    suggested_social_setting = db.Column(db.String(50), nullable=True)
+    suggested_medium = db.Column(db.String(50), nullable=True)
 
     
     # Rule Engine Metadata (Transparency)

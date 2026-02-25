@@ -41,11 +41,11 @@ const Sidebar: React.FC = () => {
                             <NavLink
                                 key={item.path}
                                 to={item.path}
-                                className={({ isActive }) => `flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive || item.label === 'Dashboard' ? 'text-gray-900 font-bold' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/50'}`}
+                                className={({ isActive }) => `flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive ? 'text-gray-900 font-bold' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/50'}`}
                             >
                                 {({ isActive }) => (
                                     <>
-                                        <item.icon size={18} className={isActive || item.label === 'Dashboard' ? 'text-gray-900' : 'text-gray-400'} />
+                                        <item.icon size={18} className={isActive ? 'text-gray-900' : 'text-gray-400'} />
                                         <span>{item.label}</span>
                                     </>
                                 )}
@@ -76,10 +76,14 @@ const Sidebar: React.FC = () => {
                     <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Help</h3>
                     <NavLink
                         to="/help"
-                        className="flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100/50 transition-colors"
+                        className={({ isActive }) => `flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive ? 'text-gray-900 font-bold' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/50'}`}
                     >
-                        <HelpCircle size={18} />
-                        <span>Help Center</span>
+                        {({ isActive }) => (
+                            <>
+                                <HelpCircle size={18} className={isActive ? 'text-gray-900' : 'text-gray-400'} />
+                                <span>Help Center</span>
+                            </>
+                        )}
                     </NavLink>
                 </div>
             </div>

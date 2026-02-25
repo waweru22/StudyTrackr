@@ -49,6 +49,9 @@ export interface SessionBlock {
     refinement_reason?: string;
     academic_citation?: string;
     duration_minutes: number;
+    suggested_environment?: string;
+    suggested_social_setting?: string;
+    suggested_medium?: string;
 }
 
 export interface WeeklyBlock {
@@ -67,6 +70,9 @@ export interface ScheduleData {
 
 export interface DashboardData {
     feed: FeedItem[];
+    streak: number;
+    badge: string;
+    xp: number;
     quote?: {
         text: string;
         author: string;
@@ -76,8 +82,14 @@ export interface DashboardData {
         level: number;
     };
     next_session?: {
+        id: number | null;
         course: string;
+        course_title: string;
         time: string;
+        technique: string;
+        technique_details: string;
+        duration_minutes: number;
+        status: string;
     };
 }
 
@@ -108,4 +120,19 @@ export interface EnrolledCourse {
     level: number;
     weight: number;
     credits: number;
+}
+
+export interface SearchResult {
+    title: string;
+    url: string;
+    type: 'video' | 'textbook';
+    learning_style_tag: string;
+}
+
+export interface SavedResource {
+    id: number;
+    title: string;
+    url: string;
+    type: string;
+    saved_at: string;
 }

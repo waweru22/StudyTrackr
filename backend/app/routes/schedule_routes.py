@@ -19,10 +19,16 @@ def get_schedule():
     LAGOS_TZ = timezone(timedelta(hours=1))
     today = datetime.now(LAGOS_TZ).date()
     
-    # 3. Inference-First: If no schedule, generate it
-    # Check if we have any blocks from today onwards
-    future_check = ScheduleBlock.query.filter(ScheduleBlock.user_id == user_id, ScheduleBlock.date >= today).first()
-    if not future_check:
+    # 3. Inference-First: Regenerate if no future blocks or schedule is from a previous week
+    last_block = ScheduleBlock.query.filter(
+        ScheduleBlock.user_id == user_id,
+        ScheduleBlock.date >= today
+    ).order_by(ScheduleBlock.date.desc()).first()
+
+    start_of_week = today - timedelta(days=today.weekday())
+    needs_regen = not last_block or last_block.date < start_of_week
+
+    if needs_regen:
         from app.services.inference_service import InferenceService
         InferenceService.generate_week_schedule(user_id)
         
@@ -70,7 +76,11 @@ def get_schedule():
             "technique_name": block.technique_name,
             "technique_details": block.technique_details,
             "refinement_reason": block.refinement_reason,
-            "color_theme": get_theme(block.course.code if block.course else "General")
+            "color_theme": get_theme(block.course.code if block.course else "General"),
+            "duration_minutes": int((datetime.combine(block.date, block.end_time) - datetime.combine(block.date, block.start_time)).total_seconds() / 60),
+            "suggested_environment": block.suggested_environment,
+            "suggested_social_setting": block.suggested_social_setting,
+            "suggested_medium": block.suggested_medium
         })
         
     # 5. Get Weekly Summary (Current Week - including Today)
@@ -109,7 +119,8 @@ def get_schedule():
             "end_time": block.end_time.strftime("%H:%M"), # Added end_time
             "technique_name": block.technique_name,
             "block_type": block.block_type,
-            "color_theme": get_theme(block.course.code if block.course else "General")
+            "color_theme": get_theme(block.course.code if block.course else "General"),
+            "duration_minutes": int((datetime.combine(block.date, block.end_time) - datetime.combine(block.date, block.start_time)).total_seconds() / 60)
         })
         
     return jsonify({
@@ -163,6 +174,14 @@ def complete_block(block_id):
     
     return jsonify({"message": "Block marked as completed", "status": "completed"}), 200
 
+@schedule_bp.route('/regenerate', methods=['POST'])
+@jwt_required()
+def regenerate_schedule():
+    user_id = int(get_jwt_identity())
+    from app.services.inference_service import InferenceService
+    result = InferenceService.generate_week_schedule(user_id)
+    return jsonify({"message": result}), 200
+
 @schedule_bp.route('/debug/all', methods=['GET'])
 def debug_all_schedules():
     """
@@ -186,3 +205,39 @@ def debug_all_schedules():
         })
         
     return jsonify(results), 200
+
+@schedule_bp.route('/weekly-summary', methods=['GET'])
+@jwt_required()
+def get_weekly_summary():
+    user_id = int(get_jwt_identity())
+    from datetime import date
+    today = date.today()
+    start_of_week = today - timedelta(days=today.weekday())
+    end_of_week = start_of_week + timedelta(days=6)
+
+    total_blocks = ScheduleBlock.query.filter(
+        ScheduleBlock.user_id == user_id,
+        ScheduleBlock.date >= start_of_week,
+        ScheduleBlock.date <= end_of_week
+    ).count()
+
+    completed_blocks = ScheduleBlock.query.filter(
+        ScheduleBlock.user_id == user_id,
+        ScheduleBlock.date >= start_of_week,
+        ScheduleBlock.date <= end_of_week,
+        ScheduleBlock.status == 'completed'
+    ).count()
+
+    missed_blocks = ScheduleBlock.query.filter(
+        ScheduleBlock.user_id == user_id,
+        ScheduleBlock.date >= start_of_week,
+        ScheduleBlock.date < today,
+        ScheduleBlock.status == 'upcoming'
+    ).count()
+
+    return jsonify({
+        'total': total_blocks,
+        'completed': completed_blocks,
+        'missed': missed_blocks,
+        'remaining': total_blocks - completed_blocks - missed_blocks
+    }), 200

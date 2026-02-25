@@ -128,5 +128,15 @@ class SessionService:
         from app.services.inference_service import InferenceService
         InferenceService.optimize_schedule(session.user_id)
         
+        # Save post-session feedback fields
+        session.mood_after = data.get('mood_after')
+        session.actual_duration_minutes = data.get('actual_duration_minutes')
+        session.completed_on_time = data.get('completed_on_time', False)
+        session.would_repeat = data.get('would_repeat')
+        
         db.session.commit()
+        
+        # Update streak after session completion
+        GamificationService.calculate_streak(session.user_id)
+        
         return session, xp

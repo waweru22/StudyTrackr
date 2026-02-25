@@ -7,8 +7,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
+        sans: ['"DM Sans"', 'sans-serif'],
         josefin: ['"Josefin Sans"', 'sans-serif'],
-        'dm-sans': ['"DM Sans"', 'sans-serif'],
       },
       boxShadow: {
         'sidebar': '0 4px 60px 0 rgba(0, 0, 0, 0.05)',

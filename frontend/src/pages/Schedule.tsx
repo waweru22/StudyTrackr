@@ -38,7 +38,7 @@ const MainContent = styled.main`
     flex: 1;
     margin-left: 16rem;
     padding: 2.5rem 3rem;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'DM Sans', sans-serif;
 `;
 
 const TopBar = styled.div`
@@ -271,6 +271,30 @@ const SessionCard = ({ session, onStart }: { session: SessionBlock, onStart: (bl
                             </p>
                         </div>
                     )}
+                    {(session.suggested_environment || session.suggested_social_setting || session.suggested_medium) && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                Suggested Conditions
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                {session.suggested_environment && (
+                                    <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100">
+                                        📍 {session.suggested_environment}
+                                    </span>
+                                )}
+                                {session.suggested_social_setting && (
+                                    <span className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100">
+                                        👤 {session.suggested_social_setting}
+                                    </span>
+                                )}
+                                {session.suggested_medium && (
+                                    <span className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded border border-green-100">
+                                        📖 {session.suggested_medium}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -308,6 +332,7 @@ const Schedule: React.FC = () => {
     const [schedule, setSchedule] = useState<ScheduleData | null>(null);
     const [loading, setLoading] = useState(true);
     const [selectedSession, setSelectedSession] = useState<SessionBlock | null>(null);
+    const [regenerating, setRegenerating] = useState(false);
 
     useEffect(() => {
         const fetchSchedule = async () => {
@@ -322,6 +347,20 @@ const Schedule: React.FC = () => {
         };
         fetchSchedule();
     }, []);
+
+    const handleRegenerate = async () => {
+        if (!window.confirm('Regenerate your entire weekly schedule? This will replace all current blocks.')) return;
+        setRegenerating(true);
+        try {
+            await api.post('/schedule/regenerate', {});
+            const data = await api.get<ScheduleData>('/schedule');
+            setSchedule(data);
+        } catch (err) {
+            console.error('Failed to regenerate schedule', err);
+        } finally {
+            setRegenerating(false);
+        }
+    };
 
 
 
@@ -342,14 +381,23 @@ const Schedule: React.FC = () => {
             // Navigate to timer
             const session = schedule.today_blocks.find(b => b.id === block.id);
             if (session) {
+                const durationMins = session.duration_minutes || 50;
+                const totalSets = session.technique_name?.toLowerCase().includes('pomodoro')
+                    ? Math.max(1, Math.round(durationMins / 30))
+                    : undefined;
+
                 navigate('/session-timer', {
                     state: {
                         courseName: session.course_title,
                         courseCode: session.course_code,
-                        durationMinutes: session.duration_minutes,
+                        durationMinutes: durationMins,
                         technique: session.technique_name || 'Standard',
                         goal: session.technique_details || 'Focus',
-                        sessionId: session.id
+                        sessionId: session.id,
+                        totalSets: totalSets,
+                        suggestedEnvironment: session.suggested_environment,
+                        suggestedSocialSetting: session.suggested_social_setting,
+                        suggestedMedium: session.suggested_medium
                     }
                 });
             }
@@ -421,10 +469,27 @@ const Schedule: React.FC = () => {
                         </BreadcrumbItem>
                     </Breadcrumb>
 
-                    <UserProfile>
-                        <span className="name">{username}</span>
-                        <Avatar src={avatarSrc} alt="Profile" />
-                    </UserProfile>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <button
+                            onClick={handleRegenerate}
+                            disabled={regenerating}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                padding: '0.5rem 1rem', borderRadius: '0.5rem',
+                                border: '1px solid #E2E8F0', background: 'white',
+                                color: '#475569', fontSize: '0.85rem', fontWeight: 600,
+                                cursor: regenerating ? 'not-allowed' : 'pointer',
+                                opacity: regenerating ? 0.6 : 1,
+                                transition: 'all 0.2s',
+                            }}
+                        >
+                            {regenerating ? '⏳ Regenerating...' : '🔄 Regenerate Schedule'}
+                        </button>
+                        <UserProfile>
+                            <span className="name">{username}</span>
+                            <Avatar src={avatarSrc} alt="Profile" />
+                        </UserProfile>
+                    </div>
                 </TopBar>
 
                 <SectionTitle>Today's Schedule</SectionTitle>

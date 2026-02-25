@@ -7,19 +7,7 @@ import { ExternalLink, Flame, Clock, Brain, Award, User, RefreshCw } from 'lucid
 import SessionModal from '../components/SessionModal';
 import { useUser } from '../context/UserContext';
 import { api } from '../api/client';
-// import { useNavigate } from 'react-router-dom';
 import type { DashboardData, FeedItem } from '../types';
-
-const focusData = [
-    { name: 'Mon', focus: 50 },
-    { name: 'Tue', focus: 65 },
-    { name: 'Wed', focus: 30 },
-    { name: 'Thur', focus: 62 },
-    { name: 'Fri', focus: 75 },
-    { name: 'Sat', focus: 60 },
-    { name: 'Sun', focus: 35 },
-    { name: 'NextMon', focus: 85 },
-];
 
 
 const Dashboard: React.FC = () => {
@@ -27,7 +15,11 @@ const Dashboard: React.FC = () => {
     const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
     const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
-    // const navigate = useNavigate();
+
+    // Focus Pulse state (P4)
+    const [focusData, setFocusData] = useState<{ name: string; focus: number }[]>([]);
+    const [focusDays, setFocusDays] = useState(7);
+    const [loadingFocus, setLoadingFocus] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -36,14 +28,31 @@ const Dashboard: React.FC = () => {
                 setDashboardData(data);
             } catch (error) {
                 console.error("Failed to fetch dashboard data", error);
-                // If 401, maybe redirect (handled by api client throwing, but we catch here)
-                // For now just keep loading false so UI shows
             } finally {
                 setLoading(false);
             }
         };
         fetchData();
     }, []);
+
+    // Fetch focus pulse data (P4)
+    const fetchFocusData = async (days: number) => {
+        setLoadingFocus(true);
+        try {
+            const data = await api.get<{ name: string; focus: number }[]>(
+                `/dashboard/focus-pulse?days=${days}`
+            );
+            setFocusData(data);
+        } catch (e) {
+            console.error('Failed to fetch focus pulse', e);
+        } finally {
+            setLoadingFocus(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchFocusData(focusDays);
+    }, [focusDays]);
 
     const getIconForType = (type: string) => {
         if (type === 'alert') return <span className="absolute left-0 top-1.5 w-3.5 h-3.5 rounded-full bg-red-500 border-2 border-white shadow-sm z-10"></span>;
@@ -57,6 +66,21 @@ const Dashboard: React.FC = () => {
         if (item.type === 'tip') return 'Study Tip';
         return 'Update';
     };
+
+    // Build a SessionBlock-like object from next_session for the modal (P6)
+    const nextSessionForModal = dashboardData?.next_session && dashboardData.next_session.id ? {
+        id: dashboardData.next_session.id,
+        course_code: dashboardData.next_session.course,
+        course_title: dashboardData.next_session.course_title,
+        start_time: dashboardData.next_session.time,
+        end_time: '',
+        block_type: 'Study Session',
+        status: dashboardData.next_session.status as 'pending' | 'completed' | 'missed' | 'active',
+        technique_name: dashboardData.next_session.technique,
+        technique_details: dashboardData.next_session.technique_details,
+        color_theme: 'blue',
+        duration_minutes: dashboardData.next_session.duration_minutes,
+    } : null;
 
     return (
         <div className="flex h-screen bg-white font-sans text-gray-900">
@@ -105,12 +129,19 @@ const Dashboard: React.FC = () => {
                                     </div>
                                     <div>
                                         <h2 className="text-lg font-bold text-gray-900 mb-1">{dashboardData?.next_session?.course !== "None" ? dashboardData?.next_session?.course : "No Upcoming Session"}</h2>
+                                        {dashboardData?.next_session?.course_title && dashboardData.next_session.course !== "None" && (
+                                            <p className="text-xs text-gray-400 mb-1">{dashboardData.next_session.course_title}</p>
+                                        )}
                                         <div className="flex items-center space-x-4 text-xs text-gray-500 font-medium">
                                             {dashboardData?.next_session?.time && dashboardData.next_session.time !== "N/A" && (
                                                 <span className="flex items-center"><Clock size={14} className="mr-1" /> {dashboardData.next_session.time}</span>
                                             )}
-                                            <span className="flex items-center"><Brain size={14} className="mr-1" /> {dashboardData?.next_session?.technique || "Deep Work"}</span>
-                                            <span className="flex items-center"><User size={14} className="mr-1" /> Individual</span>
+                                            <span className="flex items-center"><Brain size={14} className="mr-1" /> {dashboardData?.next_session?.technique || "General Study"}</span>
+                                            {dashboardData?.next_session?.duration_minutes ? (
+                                                <span className="flex items-center"><User size={14} className="mr-1" /> {dashboardData.next_session.duration_minutes} min</span>
+                                            ) : (
+                                                <span className="flex items-center"><User size={14} className="mr-1" /> Individual</span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -141,36 +172,53 @@ const Dashboard: React.FC = () => {
 
                         {/* Focus Pulse Chart */}
                         <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
-                            {/* Chart Content (Keep generic for now) */}
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="text-sm font-bold text-gray-700">Focus Pulse</h3>
-                                <ExternalLink size={16} className="text-gray-400 cursor-pointer hover:text-gray-600" />
+                                <div className="flex items-center space-x-2">
+                                    {[7, 14, 30].map(d => (
+                                        <button
+                                            key={d}
+                                            onClick={() => setFocusDays(d)}
+                                            className={`text-xs px-2 py-1 rounded font-medium transition-colors ${focusDays === d
+                                                ? 'bg-blue-800 text-white'
+                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                }`}
+                                        >
+                                            {d}d
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                             <div className="flex justify-end mb-4">
                                 <div className="flex items-center space-x-2 text-xs">
-                                    <span className="px-2 py-1 bg-gray-100 rounded text-gray-600">ID</span>
                                     <div className="flex items-center">
                                         <span className="w-2 h-2 rounded-full bg-blue-800 mr-1.5"></span>
                                         <span className="text-gray-500">Focus Level</span>
                                     </div>
                                 </div>
                             </div>
-                            <div className="h-64 w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={focusData}>
-                                        <defs>
-                                            <linearGradient id="colorFocus" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#2563EB" stopOpacity={0.3} />
-                                                <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
-                                            </linearGradient>
-                                        </defs>
-                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9CA3AF' }} dy={10} />
-                                        <YAxis hide />
-                                        <Tooltip />
-                                        <Area type="monotone" dataKey="focus" stroke="#4F46E5" strokeWidth={3} fillOpacity={1} fill="url(#colorFocus)" />
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            </div>
+                            {focusData.length === 0 ? (
+                                <div className="h-64 flex items-center justify-center text-sm text-gray-400">
+                                    {loadingFocus ? 'Loading...' : 'Complete sessions to see your focus trend.'}
+                                </div>
+                            ) : (
+                                <div className="h-64 w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart data={focusData}>
+                                            <defs>
+                                                <linearGradient id="colorFocus" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#2563EB" stopOpacity={0.3} />
+                                                    <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                                                </linearGradient>
+                                            </defs>
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9CA3AF' }} dy={10} />
+                                            <YAxis hide />
+                                            <Tooltip />
+                                            <Area type="monotone" dataKey="focus" stroke="#4F46E5" strokeWidth={3} fillOpacity={1} fill="url(#colorFocus)" />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -187,11 +235,13 @@ const Dashboard: React.FC = () => {
                                 <div className="flex flex-col">
                                     <div className="flex items-center space-x-2 mb-1">
                                         <Flame className="text-orange-500 fill-current" size={20} />
-                                        <span className="text-lg font-black text-gray-900">20 Days</span>
+                                        <span className="text-lg font-black text-gray-900">
+                                            {dashboardData?.streak ?? 0} {dashboardData?.streak === 1 ? 'Day' : 'Days'}
+                                        </span>
                                     </div>
                                     <div className="flex items-center space-x-1.5">
                                         <Award size={14} className="text-yellow-500" />
-                                        <span className="text-xs font-bold text-purple-600">Bookworm</span>
+                                        <span className="text-xs font-bold text-purple-600">{dashboardData?.badge || 'Novice'}</span>
                                     </div>
                                 </div>
                             </div>
@@ -234,7 +284,7 @@ const Dashboard: React.FC = () => {
                 </div>
 
             </div>
-            <SessionModal isOpen={isSessionModalOpen} onClose={() => setIsSessionModalOpen(false)} />
+            <SessionModal isOpen={isSessionModalOpen} onClose={() => setIsSessionModalOpen(false)} session={nextSessionForModal} />
         </div>
     );
 };

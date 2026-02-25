@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import Sidebar from '../components/Sidebar';
 import { api, BASE_URL } from '../api/client';
 import { useUser } from '../context/UserContext';
-import { Plus, Upload, FileText, X, Save, ArrowLeft, File, Trash2, ExternalLink, ChevronLeft } from 'lucide-react';
+import { Plus, Upload, FileText, X, Save, File, Trash2, ChevronLeft, Eye } from 'lucide-react';
 
 // --- Types ---
 interface Note {
@@ -23,13 +23,14 @@ const LayoutContainer = styled.div`
     display: flex;
     min-height: 100vh;
     background-color: #F8FAFC;
+    font-family: 'DM Sans', sans-serif;
 `;
 
 const MainContent = styled.main`
     flex: 1;
     margin-left: 16rem;
     padding: 2.5rem 3rem;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'DM Sans', sans-serif;
 `;
 
 const TopBar = styled.div`
@@ -211,7 +212,7 @@ const EditorBody = styled.textarea`
     border: none;
     resize: none;
     outline: none;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'DM Sans', sans-serif;
 `;
 
 // --- Modal ---
@@ -231,6 +232,51 @@ const ModalContent = styled.div`
     box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
 `;
 
+const ViewerOverlay = styled.div`
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(6px);
+    display: flex; flex-direction: column;
+    z-index: 60;
+`;
+
+const ViewerHeader = styled.div`
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 2rem;
+    background: #1E293B;
+    color: white;
+`;
+
+const ViewerTitle = styled.h2`
+    font-size: 1rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+`;
+
+const ViewerCloseButton = styled.button`
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: transparent;
+    color: white;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    &:hover { background: rgba(255,255,255,0.1); }
+`;
+
+const ViewerBody = styled.div`
+    flex: 1;
+    padding: 0;
+`;
+
 
 const Notes: React.FC = () => {
     const { user } = useUser();
@@ -247,6 +293,7 @@ const Notes: React.FC = () => {
     const [uploadFile, setUploadFile] = useState<File | null>(null);
     const [uploadTitle, setUploadTitle] = useState('');
     const [uploading, setUploading] = useState(false);
+    const [viewingFile, setViewingFile] = useState<Note | null>(null);
 
     // Fetch Notes
     const fetchNotes = async () => {
@@ -272,7 +319,7 @@ const Notes: React.FC = () => {
 
     const handleEdit = (note: Note) => {
         if (note.file_path) {
-            window.open(`${BASE_URL}/notes/file/${note.file_path}`, '_blank');
+            setViewingFile(note);
             return;
         }
         setCurrentNote(note);
@@ -341,16 +388,14 @@ const Notes: React.FC = () => {
         formData.append('title', uploadTitle || uploadFile.name);
 
         try {
-            await api.post('/notes/upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            await api.post('/notes/upload', formData);
             setShowUpload(false);
             setUploadFile(null);
             setUploadTitle('');
             fetchNotes(); // Refresh list
         } catch (err) {
             console.error("Upload failed", err);
-            alert("Upload failed. Only PDF/PPTX supported.");
+            alert("Upload failed. Only PDF, PPTX, and DOCX supported.");
         } finally {
             setUploading(false);
         }
@@ -435,11 +480,11 @@ const Notes: React.FC = () => {
                                             </NoteInfo>
                                         </NoteHeader>
                                         <p className="text-sm text-gray-500 mt-2 line-clamp-3">
-                                            {note.file_path ? `File: ${note.file_type?.toUpperCase()}` : note.content}
+                                            {note.file_path ? `PDF Document` : note.content}
                                         </p>
                                     </div>
                                     <NoteMeta>
-                                        {note.file_path && <ExternalLink size={14} className="text-blue-500 mr-auto" />}
+                                        {note.file_path && <Eye size={14} className="text-blue-500 mr-auto" />}
                                         <button
                                             className="text-gray-300 hover:text-red-500 transition-colors p-1"
                                             onClick={(e) => handleDelete(e, note.id)}
@@ -494,11 +539,11 @@ const Notes: React.FC = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">File (PDF / PPTX)</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">File (PDF / PPTX / DOCX)</label>
                                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition-colors cursor-pointer relative">
                                     <input
                                         type="file"
-                                        accept=".pdf,.ppt,.pptx"
+                                        accept=".pdf,.ppt,.pptx,.docx"
                                         className="absolute inset-0 opacity-0 cursor-pointer"
                                         onChange={e => setUploadFile(e.target.files?.[0] || null)}
                                     />
@@ -527,6 +572,28 @@ const Notes: React.FC = () => {
                         </div>
                     </ModalContent>
                 </ModalOverlay>
+            )}
+
+            {/* PDF Viewer Modal */}
+            {viewingFile && viewingFile.file_path && (
+                <ViewerOverlay>
+                    <ViewerHeader>
+                        <ViewerTitle>{viewingFile.title}</ViewerTitle>
+                        <ViewerCloseButton onClick={() => setViewingFile(null)}>
+                            <X size={16} />
+                            Close
+                        </ViewerCloseButton>
+                    </ViewerHeader>
+                    <ViewerBody>
+                        <iframe
+                            src={`${BASE_URL}/notes/file/${viewingFile.file_path}`}
+                            width="100%"
+                            height="100%"
+                            style={{ border: 'none', display: 'block', minHeight: 'calc(100vh - 56px)' }}
+                            title={viewingFile.title}
+                        />
+                    </ViewerBody>
+                </ViewerOverlay>
             )}
         </LayoutContainer>
     );

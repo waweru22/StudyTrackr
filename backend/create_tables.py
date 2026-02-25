@@ -1,5 +1,5 @@
 from app import create_app, db
-from app.models.course import Material
+from app.models.course import SavedResource
 
 app = create_app()
 

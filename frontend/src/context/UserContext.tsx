@@ -104,7 +104,9 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         // Determine Focus Threshold
         const focusMap: Record<string, number> = {
-            '25 mins': 25, '45 mins': 45, '60 mins': 60, '90 mins': 90
+            'short': 25,
+            'medium': 60,
+            'long': 110,
         };
         const focusThreshold = focusMap[s4.focusDuration] || 60;
 
@@ -122,6 +124,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             learning_style: s4.learningStyle,
             environment_pref: s4.environment,
             focus_threshold: focusThreshold,
+            focusDuration: s4.focusDuration,
             place_of_study: s4.environment,
             study_mode: s4.approach,
 

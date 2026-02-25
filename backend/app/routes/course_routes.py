@@ -29,6 +29,17 @@ def get_courses():
     # Current behavior is to filter if param exists.
             
     courses = query.order_by(Course.code.asc()).all()
+    
+    return jsonify([{
+        'id': c.id,
+        'code': c.code,
+        'name': c.name,
+        'level': c.level,
+        'semester': c.semester,
+        'weight': c.weight,
+        'credits': c.credits
+    } for c in courses]), 200
+
 @course_bp.route('/my_courses', methods=['GET'])
 @jwt_required()
 def get_my_courses():

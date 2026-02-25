@@ -3,7 +3,6 @@ from app.models.user import User
 
 class GamificationService:
     @staticmethod
-    @staticmethod
     def award_xp(user_id, net_duration_minutes, distraction_count):
         user = User.query.get(user_id)
         if not user: return 0
@@ -30,9 +29,7 @@ class GamificationService:
         user = User.query.get(user_id)
         if not user: return 0
         
-        penalty_amount = 50 # Fixed penalty for missed session
-        
-        # Deduct, but don't go below 0 for now (or maybe allow negative? let's stick to 0 floor)
+        penalty_amount = 50
         user.xp_points = max(0, user.xp_points - penalty_amount)
         
         db.session.commit()
@@ -40,51 +37,64 @@ class GamificationService:
 
     @staticmethod
     def check_badges(user):
-        # Simple thresholds
         if user.xp_points >= 1000 and user.badge == "Novice":
             user.badge = "Apprentice"
         elif user.xp_points >= 5000 and user.badge == "Apprentice":
             user.badge = "Master"
         elif user.xp_points >= 10000:
             user.badge = "Grandmaster"
-            
-    @staticmethod
-    def update_streak(user_id):
-        user = User.query.get(user_id)
-        # Logic to check if practiced yesterday would go here
-        # For simplicity, just increment
-        user.streak_count += 1
-        db.session.commit()
 
     @staticmethod
     def calculate_streak(user_id):
         """
-        Checks if the difference between current time and last completed ScheduleBlock.created_at
-        is less than 24 hours to maintain the user's daily streak.
+        Recalculates streak based on completed StudySessions.
+        A streak is maintained if the user completed at least one session today or yesterday.
+        Streak increments only once per calendar day.
         """
-        from app.models.session import ScheduleBlock
-        from datetime import datetime, timedelta
-        
+        from app.models.session import StudySession
+        from datetime import datetime, date, timedelta
+
         user = User.query.get(user_id)
-        if not user: return
-        
-        last_block = ScheduleBlock.query.filter_by(user_id=user_id).order_by(ScheduleBlock.created_at.desc()).first()
-        
-        if not last_block:
+        if not user:
+            return
+
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+
+        # Get all days on which the user completed at least one session
+        completed_sessions = StudySession.query.filter(
+            StudySession.user_id == user_id,
+            StudySession.end_time != None,
+            StudySession.success_score != None
+        ).order_by(StudySession.start_time.desc()).all()
+
+        if not completed_sessions:
             user.streak_count = 0
             db.session.commit()
             return
-            
-        now = datetime.utcnow()
-        diff = now - last_block.created_at
-        
-        # Strict 24h check per requirements
-        if diff > timedelta(hours=24):
+
+        # Build a set of unique dates with completed sessions
+        completed_dates = sorted(
+            set(s.start_time.date() for s in completed_sessions),
+            reverse=True
+        )
+
+        # Check if streak is still active (most recent session today or yesterday)
+        if completed_dates[0] < yesterday:
             user.streak_count = 0
-        else:
-            # If within 24h, streak is maintained.
-            # Ideally we increment if it's a "new day" action, but prompt just says "maintain".
-            # We assume update_streak handles incrementing on action.
-            pass
-            
+            db.session.commit()
+            return
+
+        # Count consecutive days backwards from today
+        streak = 0
+        check_date = today if completed_dates[0] == today else yesterday
+
+        for d in completed_dates:
+            if d == check_date:
+                streak += 1
+                check_date -= timedelta(days=1)
+            elif d < check_date:
+                break
+
+        user.streak_count = streak
         db.session.commit()

@@ -10,11 +10,11 @@ logger = logging.getLogger("RuleEngine")
 
 class RuleEngine:
     @staticmethod
-    def evaluate_triggers(context_data):
+    def evaluate_triggers(context_data, context_type="schedule"):
         """
         Dynamically parses 'inference_trigger' strings against context_data.
         """
-        rules = StudyKnowledge.query.all()
+        rules = StudyKnowledge.query.filter_by(rule_type=context_type).all()
         applicable_rules = []
         
         # Normalize context keys to lowercase for matching
