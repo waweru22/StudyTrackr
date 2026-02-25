@@ -48,8 +48,8 @@ def get_dashboard():
         (Broadcast.target_level == user.level) | (Broadcast.target_level == 0)
     ).order_by(Broadcast.timestamp.desc()).limit(5).all()
     
-    from app.models.system_alert import SystemAlert
-    alerts = SystemAlert.query.filter_by(user_id=user_id).order_by(SystemAlert.created_at.desc()).limit(5).all()
+    from app.models.notification import Notification
+    notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).limit(5).all()
     
     feed_items = []
     for b in broadcasts:
@@ -57,11 +57,17 @@ def get_dashboard():
         item['type'] = 'broadcast'
         feed_items.append(item)
         
-    for a in alerts:
-        item = a.to_dict()
-        feed_items.append(item)
+    for n in notifications:
+        feed_items.append({
+            'id': n.id,
+            'title': n.title,
+            'message': n.message,
+            'type': n.type,
+            'timestamp': n.created_at.isoformat() if n.created_at else '',
+            'is_read': n.is_read,
+        })
         
-    feed_items.sort(key=lambda x: x['timestamp'], reverse=True)
+    feed_items.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
     feed = feed_items[:5]
     
     # Featured Tip

@@ -27,7 +27,7 @@ const Login: React.FC = () => {
 
             // Store token
             if (response.access_token) {
-                localStorage.setItem('token', response.access_token);
+                sessionStorage.setItem('token', response.access_token);
                 // Sync user state immediately 
                 await fetchUser();
                 // navigate to dashboard

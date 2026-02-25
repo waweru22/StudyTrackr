@@ -1,8 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import { api } from '../api/client';
-import { Award, Flame, Zap, Edit2, Brain, BarChart3, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
+import { Award, Flame, Zap, Edit2, Brain, BarChart3, BookOpen, ChevronDown, ChevronUp, Sparkles, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+
+interface AdaptationInsight {
+    type: 'positive' | 'warning' | 'neutral' | 'info';
+    text: string;
+}
+
+interface SessionHistoryItem {
+    date: string;
+    day: string;
+    course_code: string;
+    environment: string;
+    vibe: string;
+    success_score: number;
+    distraction_count: number;
+    duration_minutes: number;
+    session_insight: string;
+    mood_after: number | null;
+    would_repeat: boolean | null;
+}
 
 interface UserProfile {
     id: number;
@@ -18,6 +37,11 @@ interface UserProfile {
     focus_threshold: number;
     learning_style: string;
     daily_cognitive_budget: number;
+    adaptation_insights?: AdaptationInsight[];
+    total_sessions?: number;
+    avg_efficacy?: number;
+    dominant_environment?: string;
+    created_at?: string;
 }
 
 interface WeeklySummary {
@@ -78,8 +102,10 @@ const Profile: React.FC = () => {
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [weekly, setWeekly] = useState<WeeklySummary | null>(null);
     const [courses, setCourses] = useState<UserCourse[]>([]);
+    const [sessionHistory, setSessionHistory] = useState<SessionHistoryItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [showAllCourses, setShowAllCourses] = useState(false);
+    const [expandedSession, setExpandedSession] = useState<number | null>(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -87,11 +113,13 @@ const Profile: React.FC = () => {
             api.get<UserProfile>('/users/profile'),
             api.get<WeeklySummary>('/schedule/weekly-summary'),
             api.get<UserCourse[]>('/users/courses'),
+            api.get<SessionHistoryItem[]>('/users/session-history'),
         ])
-            .then(([profileData, weeklyData, coursesData]) => {
+            .then(([profileData, weeklyData, coursesData, historyData]) => {
                 setProfile(profileData);
                 setWeekly(weeklyData);
                 setCourses(coursesData);
+                setSessionHistory(historyData);
             })
             .catch(err => console.error(err))
             .finally(() => setLoading(false));
@@ -138,8 +166,8 @@ const Profile: React.FC = () => {
                                     <p className="text-xl font-bold text-gray-900">{profile.level} Lvl</p>
                                 </div>
                                 <div className="p-4 bg-gray-50 rounded-xl">
-                                    <p className="text-xs text-gray-400 uppercase font-bold tracking-wider">Phone</p>
-                                    <p className="text-xl font-bold text-gray-900">{profile.phone_number || '-'}</p>
+                                    <p className="text-xs text-gray-400 uppercase font-bold tracking-wider">Joined</p>
+                                    <p className="text-xl font-bold text-gray-900">{profile.created_at ? new Date(profile.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}</p>
                                 </div>
                                 <div className="p-4 bg-gray-50 rounded-xl col-span-2">
                                     <p className="text-xs text-gray-400 uppercase font-bold tracking-wider">Cognitive Profile</p>
@@ -203,7 +231,122 @@ const Profile: React.FC = () => {
                     </div>
                 </div>
 
-                {/* ─── Section 2: Weekly Performance Snapshot ────────────── */}
+                {/* ─── Section 2: Adaptation Insights ──────────────────── */}
+                {profile?.adaptation_insights && profile.adaptation_insights.length > 0 && (
+                    <div className="mt-8 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                        <div className="flex items-center space-x-3 mb-6">
+                            <Sparkles className="text-violet-500" size={22} />
+                            <h3 className="text-lg font-bold text-gray-900">What the System Has Learned</h3>
+                        </div>
+                        <div className="space-y-3">
+                            {profile.adaptation_insights.map((insight, i) => {
+                                const styles: Record<string, string> = {
+                                    positive: 'bg-green-50 border-green-200 text-green-800',
+                                    warning: 'bg-amber-50 border-amber-200 text-amber-800',
+                                    neutral: 'bg-blue-50 border-blue-200 text-blue-800',
+                                    info: 'bg-gray-50 border-gray-200 text-gray-700',
+                                };
+                                const icons: Record<string, string> = {
+                                    positive: '✓',
+                                    warning: '⚠',
+                                    neutral: '→',
+                                    info: 'ℹ',
+                                };
+                                return (
+                                    <div
+                                        key={i}
+                                        className={`flex items-start space-x-3 px-4 py-3 rounded-lg border text-sm ${styles[insight.type]}`}
+                                    >
+                                        <span className="font-bold mt-0.5 shrink-0">{icons[insight.type]}</span>
+                                        <span>{insight.text}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* ─── Section 3: Session History ──────────────────────── */}
+                <div className="mt-8 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                    <div className="flex items-center space-x-3 mb-6">
+                        <Clock className="text-teal-500" size={22} />
+                        <h3 className="text-lg font-bold text-gray-900">Recent Sessions</h3>
+                    </div>
+                    {sessionHistory.length === 0 ? (
+                        <p className="text-sm text-gray-400">No completed sessions yet.</p>
+                    ) : (
+                        <div className="space-y-1">
+                            {sessionHistory.map((s, i) => {
+                                const isExpanded = expandedSession === i;
+                                const moodLabels: Record<number, { label: string; emoji: string }> = {
+                                    1: { label: 'Drained', emoji: '😩' },
+                                    2: { label: 'Neutral', emoji: '🙂' },
+                                    3: { label: 'Energized', emoji: '⚡' },
+                                };
+                                const moodInfo = s.mood_after ? moodLabels[s.mood_after] : null;
+                                return (
+                                    <div key={i}>
+                                        <div
+                                            onClick={() => setExpandedSession(isExpanded ? null : i)}
+                                            className="flex items-center justify-between py-2.5 px-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                                        >
+                                            <div className="flex items-center space-x-3">
+                                                <div className="text-center w-10">
+                                                    <p className="text-xs font-bold text-gray-800">{s.date}</p>
+                                                    <p className="text-[10px] text-gray-400">{s.day.slice(0, 3)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-semibold text-gray-800">{s.course_code}</p>
+                                                    <p className="text-xs text-gray-400">{s.environment} · {s.vibe}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center space-x-3 text-right">
+                                                <div>
+                                                    <p className="text-sm font-bold text-blue-700">{s.success_score}/5</p>
+                                                    <p className="text-[10px] text-gray-400">{s.duration_minutes}min</p>
+                                                </div>
+                                                <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                                            </div>
+                                        </div>
+                                        <div
+                                            className="overflow-hidden transition-all duration-300 ease-in-out"
+                                            style={{ maxHeight: isExpanded ? '200px' : '0px', opacity: isExpanded ? 1 : 0 }}
+                                        >
+                                            <div className="px-3 pb-3 pt-1 ml-12 space-y-2">
+                                                <div className="flex items-center space-x-4 text-xs">
+                                                    <span className="flex items-center space-x-1">
+                                                        <span className="font-semibold text-gray-500">Effectiveness:</span>
+                                                        <span className="font-bold">{s.success_score}/5</span>
+                                                        <span className={`inline-block w-2 h-2 rounded-full ${s.success_score >= 4 ? 'bg-green-400' : s.success_score >= 3 ? 'bg-yellow-400' : 'bg-red-400'}`} />
+                                                    </span>
+                                                    {moodInfo && (
+                                                        <span className="flex items-center space-x-1">
+                                                            <span className="font-semibold text-gray-500">Mood:</span>
+                                                            <span>{moodInfo.label} {moodInfo.emoji}</span>
+                                                        </span>
+                                                    )}
+                                                    {s.would_repeat !== null && (
+                                                        <span className="flex items-center space-x-1">
+                                                            <span className="font-semibold text-gray-500">Would repeat:</span>
+                                                            <span>{s.would_repeat ? 'Yes 🔥' : 'No 💡'}</span>
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {s.session_insight && (
+                                                    <div className="bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">
+                                                        <p className="text-xs text-indigo-700">{s.session_insight}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                {/* ─── Section 4: Weekly Performance Snapshot ────────────── */}
                 {weekly && (
                     <div className="mt-8 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
                         <div className="flex items-center space-x-3 mb-6">

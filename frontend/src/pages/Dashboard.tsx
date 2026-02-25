@@ -3,7 +3,8 @@ import Sidebar from '../components/Sidebar';
 import quoteBg from '../assets/quote_background.png';
 import mathIcon from '../assets/math_icon.png';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { ExternalLink, Flame, Clock, Brain, Award, User, RefreshCw } from 'lucide-react';
+import { ExternalLink, Flame, Clock, Brain, Award, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import SessionModal from '../components/SessionModal';
 import { useUser } from '../context/UserContext';
 import { api } from '../api/client';
@@ -20,6 +21,8 @@ const Dashboard: React.FC = () => {
     const [focusData, setFocusData] = useState<{ name: string; focus: number }[]>([]);
     const [focusDays, setFocusDays] = useState(7);
     const [loadingFocus, setLoadingFocus] = useState(false);
+    const [recentNotifications, setRecentNotifications] = useState<{ id: number; title: string; type: string; created_at: string }[]>([]);
+    const navigate = useNavigate();
 
     useEffect(() => {
         const fetchData = async () => {
@@ -33,6 +36,11 @@ const Dashboard: React.FC = () => {
             }
         };
         fetchData();
+
+        // Fetch recent notifications for the activity card
+        api.get<{ id: number; title: string; type: string; created_at: string }[]>('/notifications/')
+            .then(data => setRecentNotifications(data.slice(0, 3)))
+            .catch(() => { });
     }, []);
 
     // Fetch focus pulse data (P4)
@@ -65,6 +73,22 @@ const Dashboard: React.FC = () => {
         if (item.type === 'alert') return 'System Alert';
         if (item.type === 'tip') return 'Study Tip';
         return 'Update';
+    };
+
+    const notifIcons: Record<string, string> = {
+        encouragement: '🔥', alert: '⚠️', milestone: '🏆', system: 'ℹ️'
+    };
+
+    const timeAgo = (dateStr: string): string => {
+        const diffMs = Date.now() - new Date(dateStr).getTime();
+        const mins = Math.floor(diffMs / 60000);
+        if (mins < 1) return 'Just now';
+        if (mins < 60) return `${mins}m ago`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}h ago`;
+        const days = Math.floor(hrs / 24);
+        if (days === 1) return 'Yesterday';
+        return `${days}d ago`;
     };
 
     // Build a SessionBlock-like object from next_session for the modal (P6)
@@ -251,7 +275,7 @@ const Dashboard: React.FC = () => {
                         <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm min-h-[400px] mr-[90px]">
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="text-sm font-bold text-gray-700">Recent Activity</h3>
-                                <button onClick={() => window.location.reload()}><RefreshCw size={14} className="text-gray-400 hover:text-blue-600" /></button>
+                                <button onClick={() => navigate('/notifications')} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors">See all</button>
                             </div>
 
                             <div className="space-y-6 relative">
@@ -260,20 +284,19 @@ const Dashboard: React.FC = () => {
 
                                 {loading && <p className="text-sm text-gray-400 pl-6">Loading feed...</p>}
 
-                                {!loading && dashboardData?.feed && dashboardData.feed.map((item, index) => (
-                                    <div key={index} className="relative pl-6">
-                                        {getIconForType(item.type)}
+                                {!loading && recentNotifications.length > 0 && recentNotifications.map((n) => (
+                                    <div key={n.id} className="relative pl-6">
+                                        <span className="absolute left-0 top-1.5 w-3.5 h-3.5 rounded-full bg-blue-400 border-2 border-white shadow-sm z-10"></span>
                                         <div className="flex justify-between items-start mb-1">
-                                            <h4 className="text-xs font-bold text-gray-900">{getTitleForType(item)}</h4>
-                                            <span className="text-[10px] text-gray-400">{new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            <h4 className="text-xs font-bold text-gray-900">
+                                                {notifIcons[n.type] || 'ℹ️'} {n.title}
+                                            </h4>
+                                            <span className="text-[10px] text-gray-400">{timeAgo(n.created_at)}</span>
                                         </div>
-                                        <p className="text-xs text-gray-500 leading-relaxed">
-                                            {item.message}
-                                        </p>
                                     </div>
                                 ))}
 
-                                {!loading && (!dashboardData?.feed || dashboardData.feed.length === 0) && (
+                                {!loading && recentNotifications.length === 0 && (
                                     <div className="pl-6 text-xs text-gray-400">No recent activity</div>
                                 )}
                             </div>

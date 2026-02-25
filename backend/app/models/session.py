@@ -28,6 +28,7 @@ class StudySession(db.Model):
     actual_duration_minutes = db.Column(db.Integer, nullable=True)
     completed_on_time = db.Column(db.Boolean, nullable=True)
     would_repeat = db.Column(db.Boolean, nullable=True)
+    session_insight = db.Column(db.String(500), nullable=True)
     
     # Relationships
     user = db.relationship('User', backref=db.backref('sessions', lazy=True))

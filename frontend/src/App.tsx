@@ -16,6 +16,7 @@ import Login from './pages/Login';
 import VerifyOTP from './pages/VerifyOTP';
 import SessionTimer from './pages/SessionTimer';
 import { UserProvider } from './context/UserContext';
+import NotificationsPage from './pages/NotificationsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -43,6 +44,7 @@ function App() {
             <Route path="/materials" element={<Materials />} />
             <Route path="/notes" element={<Notes />} />
             <Route path="/session-timer" element={<SessionTimer />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
           </Route>
         </Routes>
       </Router>

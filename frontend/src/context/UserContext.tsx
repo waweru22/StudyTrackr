@@ -80,14 +80,14 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } catch (error) {
             console.error("Failed to fetch user profile", error);
             // Optionally clear token if fetch fails due to auth error
-            localStorage.removeItem('token');
+            sessionStorage.removeItem('token');
             setUser(null);
         }
     };
 
     // Initial Fetch on Mount (if token exists)
     React.useEffect(() => {
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         if (token) {
             fetchUser();
         }
@@ -95,7 +95,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const registerUser = async (finalStep4Data?: Step4Data) => {
         // Clear any existing session to prevent ghost logins
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
 
         // Merge Step 4 data if provided
         const s4 = finalStep4Data || step4Data;
@@ -149,7 +149,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             });
 
             if (response.access_token) {
-                localStorage.setItem('token', response.access_token);
+                sessionStorage.setItem('token', response.access_token);
                 await fetchUser(); // Sync user state immediately!
             }
         } catch (error) {
@@ -159,7 +159,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const logout = () => {
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         setUser(null);
 
         // Reset State

@@ -61,4 +61,7 @@ def create_app(config_class=Config):
     from app.routes.admin_routes import admin_bp
     app.register_blueprint(admin_bp, url_prefix='/admin')
 
+    from app.routes.notification_routes import notification_bp
+    app.register_blueprint(notification_bp, url_prefix='/notifications')
+
     return app

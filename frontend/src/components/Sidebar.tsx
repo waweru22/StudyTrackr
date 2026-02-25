@@ -22,7 +22,7 @@ const Sidebar: React.FC = () => {
 
     const handleSignOut = () => {
         // Clear auth state
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         navigate('/');
     };
 

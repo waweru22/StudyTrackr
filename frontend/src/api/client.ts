@@ -9,7 +9,7 @@ interface RequestOptions {
 }
 
 export async function apiRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
 
     const headers: Record<string, string> = {
         ...options.headers,
@@ -44,8 +44,8 @@ export async function apiRequest<T>(endpoint: string, options: RequestOptions = 
 
             // Handle Token Expiration
             if (response.status === 401 && errorMessage.includes('Token has expired')) {
-                localStorage.removeItem('token');
-                localStorage.removeItem('user_id');
+                sessionStorage.removeItem('token');
+                sessionStorage.removeItem('user_id');
                 // Force redirect to login
                 window.location.href = '/login';
                 throw new Error("Session expired. Please login again.");

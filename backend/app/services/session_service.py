@@ -2,6 +2,33 @@ from app import db
 from app.models.session import StudySession
 from datetime import datetime, timedelta
 from app.services.gamification_service import GamificationService
+from app.services.notification_service import NotificationService
+
+
+def generate_session_insight(session):
+    parts = []
+    env = session.environment or "unknown location"
+    score = int(session.success_score or 0)
+    vibe = session.vibe or ""
+    mood_labels = {1: "Drained", 2: "Neutral", 3: "Energized"}
+    mood = mood_labels.get(session.mood_after, "")
+
+    if score >= 4 and vibe == "High Energy":
+        parts.append(f"{score}/5 in the {env} with High Energy — your best conditions.")
+    elif score <= 2 and session.distraction_count >= 2:
+        parts.append(f"High distractions at {env} pulled this score down to {score}/5.")
+    elif score <= 2 and vibe == "Low Energy":
+        parts.append(f"Low energy session — {score}/5. The system will adjust tomorrow's load.")
+    elif session.would_repeat is False:
+        parts.append(f"You wouldn't repeat this technique. That's been noted for schedule refinement.")
+    else:
+        parts.append(f"{score}/5 — a solid session at {env}.")
+
+    if mood:
+        parts.append(f"You felt {mood} afterwards.")
+
+    return " ".join(parts)
+
 
 class SessionService:
     @staticmethod
@@ -134,9 +161,51 @@ class SessionService:
         session.completed_on_time = data.get('completed_on_time', False)
         session.would_repeat = data.get('would_repeat')
         
+        # Generate insight string from session data
+        session.session_insight = generate_session_insight(session)
+        
         db.session.commit()
         
         # Update streak after session completion
         GamificationService.calculate_streak(session.user_id)
+        
+        # ── Notification triggers (never crash session saving) ──
+        try:
+            from app.models.user import User
+            user = User.query.get(session.user_id)
+            score = int(session.success_score or 0)
+            course_name = session.course.name if session.course else "your course"
+
+            if score >= 4:
+                NotificationService.create_notification(
+                    user_id=session.user_id,
+                    title="Great session! 🔥",
+                    message=f"You scored {score}/5 on your {course_name} session. Keep it up.",
+                    type="encouragement"
+                )
+            elif score <= 2:
+                NotificationService.create_notification(
+                    user_id=session.user_id,
+                    title="Tough session noted",
+                    message=f"Your {course_name} session scored {score}/5. The system will adjust your next block.",
+                    type="alert"
+                )
+
+            milestone_messages = {
+                10:  ("10-Day Streak! 🏆", "You've studied 10 days in a row. You're building a real habit."),
+                25:  ("25-Day Streak! 🔥", "25 consecutive days. Remarkable consistency."),
+                50:  ("50-Day Streak! 🌟", "50 days straight. You're in elite territory."),
+                100: ("100-Day Streak! 🎓", "100 days. Legendary."),
+            }
+            if user and user.streak_count in milestone_messages:
+                title, message = milestone_messages[user.streak_count]
+                NotificationService.create_notification(
+                    user_id=session.user_id,
+                    title=title,
+                    message=message,
+                    type="milestone"
+                )
+        except Exception as e:
+            print(f"[session_service] Notification trigger failed: {e}")
         
         return session, xp
