@@ -74,37 +74,84 @@ def verify_otp():
 
 @auth_bp.route('/admin/register', methods=['POST'])
 def register_admin():
+    import os
     data = request.get_json()
-    email = data.get('email')
+    email = data.get('email', '').strip().lower()
     staff_id = data.get('staff_id')
+    admin_key = data.get('admin_key')
     
+    # 1. Verify SECRET_ADMIN_KEY
+    expected_key = os.getenv('SECRET_ADMIN_KEY')
+    if not admin_key or admin_key != expected_key:
+        print(f"[SECURITY] Failed admin registration attempt for email={email}")
+        return jsonify({"error": "Invalid admin key"}), 401
+    
+    # 2. Validate email domain
     if not email or not email.endswith('@nileuni.edu.ng'):
         return jsonify({"error": "Invalid email domain. Must be @nileuni.edu.ng"}), 400
         
     if not staff_id:
         return jsonify({"error": "Staff ID is required"}), 400
-        
-    # Register user via Service (pass role='admin')
-    # Use existing register_user but need to ensure it handles role/staff_id or update it
-    # Actually, register_user in AuthService takes 'data' and creates User.
-    # We should update AuthService.register_user to handle role/staff_id if present in data.
     
-    # Inject role into data
+    # 3. Register admin user (no courses, no onboarding)
     data['role'] = 'admin'
+    data['email'] = email
+    data['level'] = data.get('level', 0)
+    data['username'] = data.get('username') or staff_id  # Use staff_id as username fallback
     
     user, message = AuthService.register_user(data)
     
     if not user:
         return jsonify({"error": message}), 400
-        
-    # Generate OTP for verification
-    otp = AuthService.generate_otp(email)
+    
+    # 4. Set admin as auto-verified
+    user.is_verified = True
+    db.session.commit()
+    
+    # 5. Generate token directly (no OTP needed for admin)
+    token = create_access_token(identity=str(user.id))
     
     return jsonify({
-        "message": "Admin Registration Successful. Please verify OTP.", 
-        "otp_debug": otp, # Remove in prod
-        "user_id": user.id
+        "message": "Admin registered successfully.",
+        "access_token": token,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "role": user.role,
+            "staff_id": user.staff_id
+        }
     }), 201
+
+@auth_bp.route('/admin/login', methods=['POST'])
+def admin_login():
+    data = request.get_json()
+    email = data.get('email', '').strip().lower()
+    password = data.get('password')
+    
+    if not email or not password:
+        return jsonify({"error": "Email and password are required"}), 400
+    
+    user = User.query.filter_by(email=email).first()
+    
+    if not user or not check_password_hash(user.hashed_password, password):
+        return jsonify({"error": "Invalid credentials"}), 401
+    
+    if user.role != 'admin':
+        return jsonify({"error": "Access denied. Admin accounts only."}), 403
+    
+    token = create_access_token(identity=str(user.id))
+    return jsonify({
+        "message": "Admin login successful",
+        "access_token": token,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "role": user.role,
+            "staff_id": user.staff_id
+        }
+    }), 200
 
 @auth_bp.route('/onboard', methods=['POST'])
 def onboard():

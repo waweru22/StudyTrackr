@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Battery, BatteryMedium, BatteryLow, User, Users, Eye, Ear, NotebookPen, Book, Laptop, Tablet, Smartphone, LayoutGrid } from 'lucide-react';
+import { X, Battery, BatteryMedium, BatteryLow, User, Users, Eye, Ear, NotebookPen, Book, Laptop, Tablet, Smartphone, Hand } from 'lucide-react';
 import type { SessionBlock } from '../types';
 
 interface SessionModalProps {
@@ -171,10 +171,10 @@ const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose, session })
                         <h3 className="text-sm font-bold text-gray-700 mb-3">Learning Mode</h3>
                         <div className="grid grid-cols-4 gap-3">
                             {[
-                                { id: 'Visual', label: 'Solo', icon: Eye, color: 'text-blue-400' }, // Label per image is 'Solo'
-                                { id: 'Aural', label: 'Aural', icon: Ear, color: 'text-amber-700' },
-                                { id: 'Read/Write', label: 'Read/Write', icon: NotebookPen, color: 'text-blue-700' },
-                                { id: 'Kinesthetic', label: 'Kinesthetic', icon: LayoutGrid, color: 'text-green-500' } // Using LayoutGrid for blocks/shapes
+                                { id: 'visual', label: 'Visual', icon: Eye, color: 'text-blue-400' },
+                                { id: 'aural', label: 'Aural', icon: Ear, color: 'text-amber-700' },
+                                { id: 'read_write', label: 'Read/Write', icon: NotebookPen, color: 'text-blue-700' },
+                                { id: 'kinesthetic', label: 'Kinesthetic', icon: Hand, color: 'text-green-500' }
                             ].map((option) => (
                                 <button
                                     key={option.id}
@@ -193,9 +193,9 @@ const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose, session })
                         <h3 className="text-sm font-bold text-gray-700 mb-3">Learning Medium</h3>
                         <div className="grid grid-cols-4 gap-3">
                             {[
-                                { id: 'Laptop', label: 'Solo', icon: Laptop, color: 'text-cyan-500' }, // Label per image is 'Solo'
-                                { id: 'Tablet', label: 'Aural', icon: Tablet, color: 'text-slate-500' }, // Label per image is 'Aural'
-                                { id: 'Phone', label: 'Read/Write', icon: Smartphone, color: 'text-blue-600' }, // Label per image is 'Read/Write'
+                                { id: 'Laptop', label: 'Laptop', icon: Laptop, color: 'text-cyan-500' },
+                                { id: 'Tablet', label: 'Tablet', icon: Tablet, color: 'text-slate-500' },
+                                { id: 'Phone', label: 'Smartphone', icon: Smartphone, color: 'text-blue-600' },
                                 { id: 'Books', label: 'Paper/Books', icon: Book, color: 'text-indigo-600' }
                             ].map((option) => (
                                 <button

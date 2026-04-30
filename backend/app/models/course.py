@@ -15,6 +15,7 @@ class Course(db.Model):
     semester = db.Column(db.Integer, nullable=False)
     credits = db.Column(db.Integer, nullable=False)
     weight = db.Column(db.Integer, nullable=False) # 1-5
+    is_active = db.Column(db.Boolean, default=True) # Soft-delete flag
     
     # Relationship to User via UserCourses
     students = db.relationship('User', secondary='user_courses', back_populates='courses')

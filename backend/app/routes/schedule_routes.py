@@ -10,6 +10,14 @@ schedule_bp = Blueprint('schedule', __name__)
 def get_schedule():
     user_id = int(get_jwt_identity())
     
+    # Verification gate: unverified students cannot access schedule
+    from app.models.user import User
+    user = User.query.get(user_id)
+    if user and user.role == 'student' and not user.is_verified:
+        return jsonify({
+            "error": "Your account is pending verification by an administrator.",
+            "verification_pending": True
+        }), 403
     # 1. Check for missed sessions (triggers penalties)
     from app.services.schedule_service import ScheduleService
     # ScheduleService.check_missed_sessions(user_id) # Simplify for now

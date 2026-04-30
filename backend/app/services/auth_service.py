@@ -97,7 +97,7 @@ class AuthService:
             }
             raw_focus = data.get('focusDuration') or data.get('focus_threshold')
             mapped_focus = focus_map.get(raw_focus, 60) if raw_focus in focus_map else 60
-            print(f"  focus input received: {raw_focus} → mapped to: {mapped_focus}", flush=True)
+            print(f"  focus input received: {raw_focus} -> mapped to: {mapped_focus}", flush=True)
             
             # P3: Derive daily_cognitive_budget from focusDuration
             budget_map = {

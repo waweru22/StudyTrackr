@@ -9,7 +9,7 @@ def get_courses():
     level_filter = request.args.get('level')
     semester_filter = request.args.get('semester')
     
-    query = Course.query
+    query = Course.query.filter_by(is_active=True)
     
     if level_filter:
         try:
@@ -68,7 +68,7 @@ def get_my_courses():
 @course_bp.route('/all', methods=['GET'])
 def get_all_courses():
     # Global list ordered by level then code
-    courses = Course.query.order_by(Course.level.asc(), Course.code.asc()).all()
+    courses = Course.query.filter_by(is_active=True).order_by(Course.level.asc(), Course.code.asc()).all()
     
     return jsonify([{
         'id': c.id,

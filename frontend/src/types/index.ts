@@ -102,6 +102,8 @@ export interface UserProfile {
     badge: string;
     streak_count: number;
     base_template?: string;
+    role?: string;
+    staff_id?: string;
 }
 
 export interface Material {
@@ -136,3 +138,62 @@ export interface SavedResource {
     type: string;
     saved_at: string;
 }
+
+// ─── Admin Interfaces ───────────────────────────────────────────
+
+export interface AdminDashboardData {
+    total_students: number;
+    total_sessions_completed: number;
+    avg_focus_score: number;
+    avg_session_duration: number;
+    top_techniques: { technique_name: string; usage_count: number }[];
+    top_courses: { course_id: number; course_code: string; course_name: string; session_count: number }[];
+    student_verification_pending: number;
+}
+
+export interface AdminCourse {
+    id: number;
+    code: string;
+    name: string;
+    level: number;
+    semester: number;
+    credits: number;
+    weight: number;
+    is_active: boolean;
+}
+
+export interface CourseAnalyticsItem {
+    course_id: number;
+    course_name: string;
+    course_code: string;
+    total_sessions: number;
+    avg_success_score: number;
+    avg_focus_level: number;
+    low_performers: number;
+}
+
+export interface TechniqueItem {
+    technique_name: string;
+    usage_count: number;
+    avg_success_score: number;
+    avg_focus_impact: number;
+}
+
+export interface UnverifiedStudent {
+    id: number;
+    email: string;
+    username: string;
+    level: number;
+    registration_date: string | null;
+}
+
+export interface BroadcastRecord {
+    id: number;
+    admin_id: number;
+    title: string;
+    message: string;
+    target_level: number | null;
+    created_at: string | null;
+    created_by: string;
+}
+

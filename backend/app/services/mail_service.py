@@ -61,3 +61,81 @@ class MailService:
             print(f"Failed to send email: {e}")
             # In prod, log this properly
             return False
+
+    @staticmethod
+    def send_verification_approved_email(to_email):
+        """Sends a notification that the student's account has been verified."""
+        subject = "StudyTrackr — Account Verified ✅"
+        html_content = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; line-height: 1.6; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px; }
+                .header { background-color: #16a34a; color: white; padding: 15px; text-align: center; border-radius: 8px 8px 0 0; }
+                .content { padding: 25px; background-color: #f9fafb; }
+                .footer { font-size: 12px; color: #666; text-align: center; margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header"><h2>Account Verified</h2></div>
+                <div class="content">
+                    <p>Hello,</p>
+                    <p>Your StudyTrackr account has been <strong>verified</strong> by an administrator. You can now access your personalized study schedule and all platform features.</p>
+                    <p>Log in to get started!</p>
+                </div>
+                <div class="footer">&copy; 2026 StudyTrackr. All rights reserved.</div>
+            </div>
+        </body>
+        </html>
+        """
+        msg = Message(subject, recipients=[to_email])
+        msg.html = html_content
+        msg.body = "Your StudyTrackr account has been verified. You can now access your study schedule."
+        try:
+            mail.send(msg)
+            return True
+        except Exception as e:
+            print(f"Failed to send verification email: {e}")
+            return False
+
+    @staticmethod
+    def send_broadcast_email(to_email, title, message_body):
+        """Sends an admin broadcast notification email."""
+        subject = f"StudyTrackr — {title}"
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; line-height: 1.6; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px; }}
+                .header {{ background-color: #1e3a8a; color: white; padding: 15px; text-align: center; border-radius: 8px 8px 0 0; }}
+                .content {{ padding: 25px; background-color: #f9fafb; }}
+                .message-box {{ background: #fff; border-left: 4px solid #1e3a8a; padding: 15px; margin: 15px 0; border-radius: 4px; }}
+                .footer {{ font-size: 12px; color: #666; text-align: center; margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header"><h2>StudyTrackr Announcement</h2></div>
+                <div class="content">
+                    <h3>{title}</h3>
+                    <div class="message-box">{message_body}</div>
+                </div>
+                <div class="footer">&copy; 2026 StudyTrackr. All rights reserved.</div>
+            </div>
+        </body>
+        </html>
+        """
+        msg = Message(subject, recipients=[to_email])
+        msg.html = html_content
+        msg.body = f"{title}\n\n{message_body}"
+        try:
+            mail.send(msg)
+            return True
+        except Exception as e:
+            print(f"Failed to send broadcast email: {e}")
+            return False

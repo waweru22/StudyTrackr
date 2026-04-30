@@ -19,6 +19,16 @@ import { UserProvider } from './context/UserContext';
 import NotificationsPage from './pages/NotificationsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 
+// Admin imports
+import AdminRoute from './components/AdminRoute';
+import AdminLogin from './pages/admin/AdminLogin';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminCourses from './pages/admin/AdminCourses';
+import CourseAnalytics from './pages/admin/CourseAnalytics';
+import TechniqueAnalytics from './pages/admin/TechniqueAnalytics';
+import Verification from './pages/admin/Verification';
+import AdminBroadcast from './pages/admin/AdminBroadcast';
+
 function App() {
   return (
     <UserProvider>
@@ -34,7 +44,10 @@ function App() {
           <Route path="/verify-otp" element={<VerifyOTP />} />
           <Route path="/help" element={<Help />} />
 
-          {/* Protected Routes */}
+          {/* Admin Public Route */}
+          <Route path="/admin/login" element={<AdminLogin />} />
+
+          {/* Protected Student Routes */}
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/schedule" element={<Schedule />} />
@@ -45,6 +58,16 @@ function App() {
             <Route path="/notes" element={<Notes />} />
             <Route path="/session-timer" element={<SessionTimer />} />
             <Route path="/notifications" element={<NotificationsPage />} />
+          </Route>
+
+          {/* Protected Admin Routes */}
+          <Route element={<AdminRoute />}>
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/admin/courses" element={<AdminCourses />} />
+            <Route path="/admin/analytics/courses" element={<CourseAnalytics />} />
+            <Route path="/admin/analytics/techniques" element={<TechniqueAnalytics />} />
+            <Route path="/admin/verification" element={<Verification />} />
+            <Route path="/admin/broadcast" element={<AdminBroadcast />} />
           </Route>
         </Routes>
       </Router>

@@ -1,10 +1,12 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Calendar, BookOpen, FileText, Lightbulb, User, Bell, Settings, HelpCircle, LogOut } from 'lucide-react';
+import { LayoutDashboard, Calendar, BookOpen, FileText, Lightbulb, User, Bell, Settings, HelpCircle, LogOut, Shield } from 'lucide-react';
 import logo from '../assets/logo.png';
+import { useUser } from '../context/UserContext';
 
 const Sidebar: React.FC = () => {
     const navigate = useNavigate();
+    const { user } = useUser();
 
     const navItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
@@ -70,6 +72,20 @@ const Sidebar: React.FC = () => {
                         ))}
                     </div>
                 </div>
+
+                {/* Admin Panel Link (conditional) */}
+                {user?.role === 'admin' && (
+                    <div>
+                        <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Admin</h3>
+                        <NavLink
+                            to="/admin/dashboard"
+                            className={({ isActive }) => `flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive ? 'text-blue-800 font-bold bg-blue-50' : 'text-blue-600 hover:text-blue-800 hover:bg-blue-50/50'}`}
+                        >
+                            <Shield size={18} />
+                            <span>Admin Panel</span>
+                        </NavLink>
+                    </div>
+                )}
 
                 {/* Help Section */}
                 <div>

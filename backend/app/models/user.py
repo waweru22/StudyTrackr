@@ -12,6 +12,7 @@ class User(db.Model):
     # Access Control
     role = db.Column(db.String(20), default='student') # 'student', 'admin'
     staff_id = db.Column(db.String(50), nullable=True) # Only for admins
+    is_verified = db.Column(db.Boolean, default=False) # Students require admin verification
     
     # Inference Engine Profiles
     learning_style = db.Column(db.String(20)) # VARK
