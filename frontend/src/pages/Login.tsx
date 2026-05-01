@@ -4,6 +4,7 @@ import logo from '../assets/logo.png';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useUser } from '../context/UserContext';
+import type { UserProfile } from '../types';
 
 const Login: React.FC = () => {
     const navigate = useNavigate();
@@ -20,22 +21,40 @@ const Login: React.FC = () => {
         setLoading(true);
 
         try {
+            // Try student login first
             const response = await api.post<{ access_token: string, message: string }>('/auth/login', {
                 identifier,
                 password
             });
 
-            // Store token
             if (response.access_token) {
                 sessionStorage.setItem('token', response.access_token);
-                // Sync user state immediately 
                 await fetchUser();
-                // navigate to dashboard
-                navigate('/dashboard');
+                // Check role and redirect accordingly
+                const profile = await api.get<UserProfile>('/users/profile');
+                navigate(profile.role === 'admin' ? '/admin/dashboard' : '/dashboard');
+                return;
             }
-        } catch (err: any) {
-            console.error("Login failed", err);
-            setError(err.response?.data?.error || "Invalid credentials.");
+        } catch {
+            // Student login failed — try admin login
+            try {
+                const adminResponse = await api.post<{ access_token: string, message: string }>('/auth/admin/login', {
+                    email: identifier,
+                    password
+                });
+
+                if (adminResponse.access_token) {
+                    sessionStorage.setItem('token', adminResponse.access_token);
+                    await fetchUser();
+                    navigate('/admin/dashboard');
+                    return;
+                }
+            } catch (adminErr: any) {
+                console.error("Login failed", adminErr);
+                setError(adminErr.message || "Invalid credentials.");
+                setLoading(false);
+                return;
+            }
         } finally {
             setLoading(false);
         }

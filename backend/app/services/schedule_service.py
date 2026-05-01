@@ -55,5 +55,13 @@ class ScheduleService:
                         # Apply Penalty
                         from app.services.gamification_service import GamificationService
                         GamificationService.penalize_missed_session(user_id)
-                        
+
+                        # Trigger-based notification (adds push + idempotency)
+                        try:
+                            from app.services.trigger_evaluator import TriggerEvaluator
+                            should_fire, ctx = TriggerEvaluator.check_missed_session(user_id, block.id)
+                            if should_fire:
+                                NotificationService.create_triggered_notification(user_id, 'missed_session', ctx)
+                        except Exception as e:
+                            print(f"[schedule_service] Missed session trigger failed (non-fatal): {e}")
         return notifications_created > 0

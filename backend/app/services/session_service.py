@@ -169,43 +169,30 @@ class SessionService:
         # Update streak after session completion
         GamificationService.calculate_streak(session.user_id)
         
-        # ── Notification triggers (never crash session saving) ──
+        # ── Notification triggers via TriggerEvaluator (never crash session saving) ──
         try:
-            from app.models.user import User
-            user = User.query.get(session.user_id)
-            score = int(session.success_score or 0)
-            course_name = session.course.name if session.course else "your course"
+            from app.services.trigger_evaluator import TriggerEvaluator
 
-            if score >= 4:
-                NotificationService.create_notification(
-                    user_id=session.user_id,
-                    title="Great session! 🔥",
-                    message=f"You scored {score}/5 on your {course_name} session. Keep it up.",
-                    type="encouragement"
-                )
-            elif score <= 2:
-                NotificationService.create_notification(
-                    user_id=session.user_id,
-                    title="Tough session noted",
-                    message=f"Your {course_name} session scored {score}/5. The system will adjust your next block.",
-                    type="alert"
-                )
+            # Low efficacy session (score < 2)
+            should_fire, ctx = TriggerEvaluator.check_low_efficacy_session(session.user_id, session.id)
+            if should_fire:
+                NotificationService.create_triggered_notification(session.user_id, 'low_efficacy_session', ctx)
 
-            milestone_messages = {
-                10:  ("10-Day Streak! 🏆", "You've studied 10 days in a row. You're building a real habit."),
-                25:  ("25-Day Streak! 🔥", "25 consecutive days. Remarkable consistency."),
-                50:  ("50-Day Streak! 🌟", "50 days straight. You're in elite territory."),
-                100: ("100-Day Streak! 🎓", "100 days. Legendary."),
-            }
-            if user and user.streak_count in milestone_messages:
-                title, message = milestone_messages[user.streak_count]
-                NotificationService.create_notification(
-                    user_id=session.user_id,
-                    title=title,
-                    message=message,
-                    type="milestone"
-                )
+            # Burnout warning (2+ low energy in last 3 sessions)
+            should_fire, ctx = TriggerEvaluator.check_burnout_warning(session.user_id)
+            if should_fire:
+                NotificationService.create_triggered_notification(session.user_id, 'burnout_warning', ctx)
+
+            # Badge earned (XP threshold crossed)
+            should_fire, ctx = TriggerEvaluator.check_badge_earned(session.user_id)
+            if should_fire:
+                NotificationService.create_triggered_notification(session.user_id, 'badge_earned', ctx)
+
+            # Streak milestone (7, 14, 30, 60 days)
+            should_fire, ctx = TriggerEvaluator.check_streak_milestone(session.user_id)
+            if should_fire:
+                NotificationService.create_triggered_notification(session.user_id, 'streak_milestone', ctx)
         except Exception as e:
-            print(f"[session_service] Notification trigger failed: {e}")
+            print(f"[session_service] Notification trigger failed (non-fatal): {e}")
         
         return session, xp

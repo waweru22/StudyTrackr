@@ -21,7 +21,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 
 // Admin imports
 import AdminRoute from './components/AdminRoute';
-import AdminLogin from './pages/admin/AdminLogin';
+import AdminRegister from './pages/admin/AdminRegister';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminCourses from './pages/admin/AdminCourses';
 import CourseAnalytics from './pages/admin/CourseAnalytics';
@@ -45,7 +45,7 @@ function App() {
           <Route path="/help" element={<Help />} />
 
           {/* Admin Public Route */}
-          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin/register" element={<AdminRegister />} />
 
           {/* Protected Student Routes */}
           <Route element={<ProtectedRoute />}>

@@ -26,7 +26,7 @@ const AdminSidebar: React.FC = () => {
 
     const handleSignOut = () => {
         sessionStorage.removeItem('token');
-        navigate('/admin/login');
+        navigate('/login');
     };
 
     const linkClass = ({ isActive }: { isActive: boolean }) =>

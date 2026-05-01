@@ -64,4 +64,11 @@ def create_app(config_class=Config):
     from app.routes.notification_routes import notification_bp
     app.register_blueprint(notification_bp, url_prefix='/notifications')
 
+    # Initialize Firebase Cloud Messaging (non-blocking)
+    try:
+        from app.services.fcm_service import FCMService
+        FCMService.initialize_firebase()
+    except Exception as e:
+        print(f"[APP] Firebase init failed (push disabled): {e}")
+
     return app

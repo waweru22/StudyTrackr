@@ -333,13 +333,17 @@ const Schedule: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [selectedSession, setSelectedSession] = useState<SessionBlock | null>(null);
     const [regenerating, setRegenerating] = useState(false);
+    const [isPendingVerification, setIsPendingVerification] = useState(false);
 
     useEffect(() => {
         const fetchSchedule = async () => {
             try {
                 const data = await api.get<ScheduleData>('/schedule');
                 setSchedule(data);
-            } catch (err) {
+            } catch (err: any) {
+                if (err?.message?.toLowerCase().includes('pending verification')) {
+                    setIsPendingVerification(true);
+                }
                 console.error("Failed to fetch schedule", err);
             } finally {
                 setLoading(false);
@@ -416,6 +420,54 @@ const Schedule: React.FC = () => {
             </MainContent>
         </LayoutContainer>
     );
+
+    if (isPendingVerification) {
+        const username = user?.username || 'Student';
+        const level = user?.level || '100';
+        const avatarSrc = `https://ui-avatars.com/api/?name=${username}&background=random&color=fff&background=4F46E5`;
+
+        return (
+            <LayoutContainer>
+                <Sidebar />
+                <MainContent>
+                    <TopBar>
+                        <Breadcrumb>
+                            <BreadcrumbItem>
+                                <span className="label">Semester</span>
+                                <span className="value">{semester || '1'}</span>
+                            </BreadcrumbItem>
+                            <BreadcrumbItem>
+                                <span className="label">Level</span>
+                                <span className="value">{level}</span>
+                            </BreadcrumbItem>
+                        </Breadcrumb>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <UserProfile>
+                                <span className="name">{username}</span>
+                                <Avatar src={avatarSrc} alt="Profile" />
+                            </UserProfile>
+                        </div>
+                    </TopBar>
+                    
+                    <SectionTitle>Today's Schedule</SectionTitle>
+                    <CardContainer>
+                        <div className="col-span-full p-8 border-2 border-dashed border-yellow-200 bg-yellow-50 rounded-xl text-center text-yellow-700">
+                            <span className="text-xl mb-2 block">⏳</span>
+                            Your account is currently pending verification by an administrator.<br/>
+                            You will be able to view and manage your schedule once approved.
+                        </div>
+                    </CardContainer>
+
+                    <WeekSection>
+                        <SectionTitle>For the Week</SectionTitle>
+                        <InsightText>
+                            Your weekly schedule will appear here once your account is verified.
+                        </InsightText>
+                    </WeekSection>
+                </MainContent>
+            </LayoutContainer>
+        );
+    }
 
     if (!schedule) return (
         <LayoutContainer>

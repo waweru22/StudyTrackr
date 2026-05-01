@@ -21,15 +21,28 @@ const typeConfig: Record<string, { border: string; bg: string; icon: string }> =
 
 function timeAgo(dateStr: string): string {
     const now = new Date();
-    const date = new Date(dateStr);
+    // Backend sends UTC timestamps without 'Z' suffix — append it so JS parses as UTC
+    const normalized = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
+    const date = new Date(normalized);
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays === 1) return 'Yesterday';
+
+    // Today's notifications: show precise time
+    const isToday = date.toLocaleDateString() === now.toLocaleDateString();
+    if (isToday) {
+        if (diffMins < 1) return 'Just now';
+        return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    }
+
+    // Yesterday
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toLocaleDateString() === yesterday.toLocaleDateString()) {
+        return 'Yesterday, ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    }
+
+    // Older
+    const diffDays = Math.floor(diffMs / 86400000);
     if (diffDays < 7) return `${diffDays} days ago`;
     return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }

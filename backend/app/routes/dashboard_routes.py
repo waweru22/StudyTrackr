@@ -41,6 +41,10 @@ def get_dashboard():
             ScheduleBlock.date > today,
             ScheduleBlock.status == 'upcoming'
         ).order_by(ScheduleBlock.date.asc(), ScheduleBlock.start_time.asc()).first()
+        
+    # Do not show upcoming sessions if user is not verified by admin
+    if not user.is_verified:
+        next_session = None
     
     # Unified Feed
     from app.models.broadcast import Broadcast

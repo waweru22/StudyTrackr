@@ -41,8 +41,11 @@ const Verification: React.FC = () => {
 
     const timeAgo = (dateStr: string | null): string => {
         if (!dateStr) return 'Unknown';
-        const diffMs = Date.now() - new Date(dateStr).getTime();
+        // Backend sends UTC timestamps without 'Z' suffix — append it so JS parses as UTC
+        const normalized = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
+        const diffMs = Date.now() - new Date(normalized).getTime();
         const mins = Math.floor(diffMs / 60000);
+        if (mins < 1) return 'Just now';
         if (mins < 60) return `${mins}m ago`;
         const hrs = Math.floor(mins / 60);
         if (hrs < 24) return `${hrs}h ago`;

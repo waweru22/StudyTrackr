@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, ArrowRight, Check, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, AlertCircle, Eye, EyeOff, GraduationCap, Shield } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
@@ -136,6 +136,23 @@ const Onboarding: React.FC = () => {
 
             {/* Main Content */}
             <main className="w-full max-w-xl px-6 py-8 flex-grow">
+                {/* Role Selector Tabs */}
+                <div className="flex bg-gray-100 rounded-lg p-1 mb-8 border border-gray-200">
+                    <button
+                        className="flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-md text-sm font-semibold transition-all bg-blue-800 text-white shadow-sm"
+                    >
+                        <GraduationCap size={16} />
+                        <span>I'm a Student</span>
+                    </button>
+                    <button
+                        onClick={() => navigate('/admin/register')}
+                        className="flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-md text-sm font-semibold transition-all text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                    >
+                        <Shield size={16} />
+                        <span>I'm an Administrator</span>
+                    </button>
+                </div>
+
                 <div className="space-y-2 mb-6">
                     <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">1 of 4</p>
                     <h2 className="text-2xl font-bold font-dm-sans text-gray-900">Secure Your Progress</h2>

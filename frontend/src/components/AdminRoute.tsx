@@ -7,7 +7,7 @@ const AdminRoute: React.FC = () => {
     const { user } = useUser();
 
     if (!token) {
-        return <Navigate to="/admin/login" replace />;
+        return <Navigate to="/login" replace />;
     }
 
     // While user profile is loading, show nothing (avoid flash)

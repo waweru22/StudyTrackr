@@ -5,6 +5,7 @@ from flask_jwt_extended import create_access_token
 from app.models.user import User
 from app import db # Need to get user to create token
 from werkzeug.security import check_password_hash
+import json
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -37,6 +38,7 @@ def login():
     return jsonify({"error": message}), 401
 
 @auth_bp.route('/request-otp', methods=['POST'])
+@auth_bp.route('/resend-otp', methods=['POST'])
 def request_otp():
     data = request.get_json()
     email = data.get('email')
@@ -57,8 +59,47 @@ def verify_otp():
     success, message = AuthService.verify_otp(email, code)
     if not success:
         return jsonify({"error": message}), 400
-        
-    # Check if user exists to token
+    
+    # ── After OTP is verified, check for pending registration ──
+    from app.models.pending_registration import PendingRegistration
+    pending = PendingRegistration.query.filter_by(email=email.lower()).first()
+    
+    if pending:
+        # This is a new registration — create the user now
+        try:
+            reg_data = json.loads(pending.registration_data)
+            
+            # 1. Create User
+            user, reg_message = AuthService.register_user(reg_data, commit=False)
+            if not user:
+                return jsonify({"error": reg_message}), 400
+            
+            # 2. Generate schedule
+            course_ids = [c.id for c in user.courses]
+            sched_result = InferenceService.generate_week_schedule(user.id, selected_course_ids=course_ids)
+            if sched_result and "No courses" in sched_result:
+                print(f"Warning: {sched_result}")
+            
+            # 3. Commit user + schedule atomically
+            db.session.commit()
+            
+            # 4. Clean up pending registration
+            PendingRegistration.query.filter_by(email=email.lower()).delete()
+            db.session.commit()
+            
+            token = create_access_token(identity=str(user.id))
+            return jsonify({
+                "message": "Email verified. Account created successfully.",
+                "access_token": token,
+                "user_id": user.id
+            }), 200
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"[verify-otp] Registration failed after OTP: {e}")
+            return jsonify({"error": "Registration failed after verification. Please try again."}), 500
+    
+    # ── Existing user verifying OTP (e.g. password reset, re-verification) ──
     user = User.query.filter_by(email=email).first()
     token = None
     user_id = None
@@ -155,34 +196,51 @@ def admin_login():
 
 @auth_bp.route('/onboard', methods=['POST'])
 def onboard():
+    """Step 1: Validate data, send OTP, store data in PendingRegistration.
+    The User is NOT created here — only after OTP verification."""
     data = request.get_json()
     
     try:
-        # 1. Register User (No Commit yet)
-        user, message = AuthService.register_user(data, commit=False)
-        if not user:
-            return jsonify({"error": message}), 400
+        email = data.get('email', '').strip().lower()
+        password = data.get('password')
+        confirm_password = data.get('confirm_password')
         
-        # 2. Get Course IDs for Inference
-        # User.courses are available in session (flushed)
-        course_ids = [c.id for c in user.courses]
+        # ── Validate before doing anything ──
+        if not email:
+            return jsonify({"error": "Email is required"}), 400
+        if not password or not confirm_password:
+            return jsonify({"error": "Password and confirm_password are required"}), 400
+        if password != confirm_password:
+            return jsonify({"error": "Passwords do not match."}), 400
+        if len(password) < 8:
+            return jsonify({"error": "Password must be at least 8 characters long."}), 400
         
-        # 3. Trigger Inference Engine
-        # Pass IDs explicitly as requested
-        sched_result = InferenceService.generate_week_schedule(user.id, selected_course_ids=course_ids)
-        if sched_result and "No courses" in sched_result:
-             # Non-fatal error: Schedule empty, but User created.
-             print(f"Warning: {sched_result}")
-             # db.session.rollback() -> REMOVED to allow OTP
-             # return jsonify({"error": sched_result}), 400 -> REMOVED
-
-        # 4. Trigger OTP Email
-        AuthService.generate_otp(user.email)
+        # Check if email already registered as a real user
+        if User.query.filter_by(email=email).first():
+            return jsonify({"error": "User already exists"}), 400
         
-        # 5. ATOMIC COMMIT
+        # Course limit check
+        selected_codes = data.get('selected_course_codes', [])
+        if len(selected_codes) > 12:
+            return jsonify({"error": "Course limit exceeded. You can select up to 12 courses."}), 400
+        
+        # ── Store registration data for later (after OTP) ──
+        from app.models.pending_registration import PendingRegistration
+        
+        # Upsert: remove old pending for this email if exists
+        PendingRegistration.query.filter_by(email=email).delete()
+        
+        pending = PendingRegistration(
+            email=email,
+            registration_data=json.dumps(data)
+        )
+        db.session.add(pending)
         db.session.commit()
         
-        return jsonify({"message": message, "user_id": user.id}), 201
+        # ── Send OTP ──
+        AuthService.generate_otp(email)
+        
+        return jsonify({"message": "OTP sent to your email. Please verify to complete registration."}), 200
         
     except Exception as e:
         db.session.rollback()
