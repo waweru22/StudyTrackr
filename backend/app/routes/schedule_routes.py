@@ -185,10 +185,32 @@ def complete_block(block_id):
 @schedule_bp.route('/regenerate', methods=['POST'])
 @jwt_required()
 def regenerate_schedule():
+    """
+    End-of-week regeneration endpoint.
+    Analyses past week's sessions and adapts next week's schedule.
+    Falls back to standard generation when no session data exists.
+    """
     user_id = int(get_jwt_identity())
-    from app.services.inference_service import InferenceService
-    result = InferenceService.generate_week_schedule(user_id)
-    return jsonify({"message": result}), 200
+
+    try:
+        from app.services.inference_service_adaptation import AdaptationEngine
+        result = AdaptationEngine.adapt_schedule_for_next_week(user_id)
+
+        if 'error' in result:
+            return jsonify({"error": result['error']}), 500
+
+        return jsonify({
+            "message": result.get('message', 'Schedule regenerated'),
+            "adaptations_made": {
+                "technique_swaps": result.get('technique_swaps', 0),
+                "time_shifts": result.get('time_shifts', 0),
+                "total_courses": result.get('total_courses_analyzed', 0),
+            },
+            "details": result.get('adaptations', {}),
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @schedule_bp.route('/debug/all', methods=['GET'])
 def debug_all_schedules():

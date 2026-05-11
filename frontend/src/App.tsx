@@ -53,7 +53,7 @@ function App() {
             <Route path="/schedule" element={<Schedule />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="/tips" element={<StudyTips />} />
+            <Route path="/study-tips" element={<StudyTips />} />
             <Route path="/materials" element={<Materials />} />
             <Route path="/notes" element={<Notes />} />
             <Route path="/session-timer" element={<SessionTimer />} />
