@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { api } from '../api/client';
 import { useUser } from '../context/UserContext';
@@ -195,8 +195,22 @@ const CourseLabel = styled.span`
 
 const SessionCard = ({ session, onStart }: { session: SessionBlock, onStart: (block: SessionBlock) => void }) => {
     const [expanded, setExpanded] = useState(false);
-    const isCompleted = session.status === 'completed';
-    const isActive = session.status === 'active';
+    const storedStatus = localStorage.getItem(`block_status_${session.id}`);
+    const isCompleted = session.status === 'completed' || storedStatus === 'completed';
+    const isEndedEarly = storedStatus === 'ended_early';
+
+    // Missed: end time has passed today and block was never started or completed
+    const isMissed = (() => {
+        if (isCompleted || isEndedEarly || storedStatus) return false;
+        if (session.status === 'missed') return true;
+        const now = new Date();
+        const [endH, endM] = session.end_time.split(':').map(Number);
+        const endToday = new Date();
+        endToday.setHours(endH, endM, 0, 0);
+        return now > endToday && !localStorage.getItem(`block_started_${session.id}`);
+    })();
+
+    const isDisabled = isCompleted || isEndedEarly || isMissed;
 
     // Calculate duration display
     const startTimeParts = session.start_time.split(':');
@@ -206,7 +220,7 @@ const SessionCard = ({ session, onStart }: { session: SessionBlock, onStart: (bl
     const duration = endMin - startMin;
 
     return (
-        <div className={`bg-white rounded-xl p-5 border border-gray-100 shadow-sm transition-all duration-300 ${isCompleted ? 'opacity-60 grayscale-[0.5]' : 'hover:shadow-md'} ${isActive ? 'ring-2 ring-indigo-500 border-transparent' : ''}`}>
+        <div className={`bg-white rounded-xl p-5 border border-gray-100 shadow-sm transition-all duration-300 ${isCompleted || isEndedEarly ? 'opacity-60 grayscale-[0.5]' : 'hover:shadow-md'}`}>
             <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center space-x-3">
                     <div className="flex flex-col">
@@ -217,11 +231,7 @@ const SessionCard = ({ session, onStart }: { session: SessionBlock, onStart: (bl
                             {duration} min
                         </span>
                     </div>
-                    {isActive && (
-                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700 uppercase tracking-wide animate-pulse">
-                            Active
-                        </span>
-                    )}
+
                     <span className={`px-2 py-0.5 rounded text-xs font-semibold tracking-wide uppercase ${session.color_theme === 'blue' ? 'bg-blue-100 text-blue-700' :
                         session.color_theme === 'purple' ? 'bg-purple-100 text-purple-700' :
                             'bg-gray-100 text-gray-700'
@@ -306,9 +316,13 @@ const SessionCard = ({ session, onStart }: { session: SessionBlock, onStart: (bl
                         </div>
                         <span className="text-sm">Completed</span>
                     </div>
-                ) : isActive ? (
-                    <div className="w-full flex items-center justify-center text-blue-600 font-bold space-x-2 py-2.5 bg-blue-50 rounded-lg animate-pulse">
-                        <span className="text-sm">Session In Progress...</span>
+                ) : isEndedEarly ? (
+                    <div className="w-full flex items-center justify-center text-gray-500 font-bold space-x-2 py-2.5 bg-gray-100 rounded-lg">
+                        <span className="text-sm">Ended Early</span>
+                    </div>
+                ) : isMissed ? (
+                    <div className="w-full flex items-center justify-center text-amber-600 font-bold space-x-2 py-2.5 bg-amber-50 rounded-lg border border-amber-100">
+                        <span className="text-sm">Missed</span>
                     </div>
                 ) : (
                     <button
@@ -328,12 +342,24 @@ const SessionCard = ({ session, onStart }: { session: SessionBlock, onStart: (bl
 
 const Schedule: React.FC = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { user, semester } = useUser(); // Using UserContext data
     const [schedule, setSchedule] = useState<ScheduleData | null>(null);
     const [loading, setLoading] = useState(true);
     const [selectedSession, setSelectedSession] = useState<SessionBlock | null>(null);
     const [regenerating, setRegenerating] = useState(false);
-    const [isPendingVerification, setIsPendingVerification] = useState(false);
+    const [adapting, setAdapting] = useState(false);
+    const [isEmailUnverified, setIsEmailUnverified] = useState(false);
+
+    // Process incoming navigation state from SessionTimer
+    useEffect(() => {
+        const state = location.state as { completedBlockId?: number; outcome?: string } | null;
+        if (state?.completedBlockId && state?.outcome) {
+            localStorage.setItem(`block_status_${state.completedBlockId}`, state.outcome);
+            // Clear navigation state so refresh doesn't re-process
+            navigate(location.pathname, { replace: true, state: null });
+        }
+    }, [location.state]);
 
     useEffect(() => {
         const fetchSchedule = async () => {
@@ -341,8 +367,8 @@ const Schedule: React.FC = () => {
                 const data = await api.get<ScheduleData>('/schedule');
                 setSchedule(data);
             } catch (err: any) {
-                if (err?.message?.toLowerCase().includes('pending verification')) {
-                    setIsPendingVerification(true);
+                if (err?.message?.toLowerCase().includes('verify your email')) {
+                    setIsEmailUnverified(true);
                 }
                 console.error("Failed to fetch schedule", err);
             } finally {
@@ -357,6 +383,14 @@ const Schedule: React.FC = () => {
         setRegenerating(true);
         try {
             await api.post('/schedule/regenerate', {});
+            // Clear all block_* keys for the new week
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('block_')) keysToRemove.push(key);
+            }
+            keysToRemove.forEach(k => localStorage.removeItem(k));
+            
             const data = await api.get<ScheduleData>('/schedule');
             setSchedule(data);
         } catch (err) {
@@ -366,48 +400,22 @@ const Schedule: React.FC = () => {
         }
     };
 
-
-
-    const handleStart = async (block: SessionBlock) => {
-        setSelectedSession(block);
-
-        if (!schedule) return;
-
-        // Optimistic UI
-        const updatedToday = schedule.today_blocks.map(b =>
-            b.id === block.id ? { ...b, status: 'active' as const } : b
-        );
-        setSchedule({ ...schedule, today_blocks: updatedToday });
-
+    const handleAdapt = async () => {
+        setAdapting(true);
         try {
-            await api.post(`/schedule/${block.id}/start`, {});
-
-            // Navigate to timer
-            const session = schedule.today_blocks.find(b => b.id === block.id);
-            if (session) {
-                const durationMins = session.duration_minutes || 50;
-                const totalSets = session.technique_name?.toLowerCase().includes('pomodoro')
-                    ? Math.max(1, Math.round(durationMins / 30))
-                    : undefined;
-
-                navigate('/session-timer', {
-                    state: {
-                        courseName: session.course_title,
-                        courseCode: session.course_code,
-                        durationMinutes: durationMins,
-                        technique: session.technique_name || 'Standard',
-                        goal: session.technique_details || 'Focus',
-                        sessionId: session.id,
-                        totalSets: totalSets,
-                        suggestedEnvironment: session.suggested_environment,
-                        suggestedSocialSetting: session.suggested_social_setting,
-                        suggestedMedium: session.suggested_medium
-                    }
-                });
-            }
-        } catch (error) {
-            console.error("Failed to start session", error);
+            await api.post('/schedule/adapt-now', {});
+            const data = await api.get<ScheduleData>('/schedule');
+            setSchedule(data);
+        } catch (err) {
+            console.error('Adaptation failed:', err);
+        } finally {
+            setAdapting(false);
         }
+    };
+
+
+    const handleStart = (block: SessionBlock) => {
+        setSelectedSession(block);
     };
 
     if (loading) return (
@@ -421,49 +429,21 @@ const Schedule: React.FC = () => {
         </LayoutContainer>
     );
 
-    if (isPendingVerification) {
-        const username = user?.username || 'Student';
-        const level = user?.level || '100';
-        const avatarSrc = `https://ui-avatars.com/api/?name=${username}&background=random&color=fff&background=4F46E5`;
-
+    if (isEmailUnverified) {
         return (
             <LayoutContainer>
                 <Sidebar />
                 <MainContent>
-                    <TopBar>
-                        <Breadcrumb>
-                            <BreadcrumbItem>
-                                <span className="label">Semester</span>
-                                <span className="value">{semester || '1'}</span>
-                            </BreadcrumbItem>
-                            <BreadcrumbItem>
-                                <span className="label">Level</span>
-                                <span className="value">{level}</span>
-                            </BreadcrumbItem>
-                        </Breadcrumb>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            <UserProfile>
-                                <span className="name">{username}</span>
-                                <Avatar src={avatarSrc} alt="Profile" />
-                            </UserProfile>
+                    <div className="flex items-center justify-center h-64">
+                        <div className="text-center p-8 border-2 border-dashed border-blue-200 bg-blue-50 rounded-xl max-w-lg">
+                            <span className="text-3xl mb-3 block">✉️</span>
+                            <h3 className="text-lg font-bold text-gray-900 mb-2">Please verify your email</h3>
+                            <p className="text-gray-600 text-sm">
+                                Check your inbox for a verification link to activate your account.
+                                Once verified, your schedule will appear here.
+                            </p>
                         </div>
-                    </TopBar>
-                    
-                    <SectionTitle>Today's Schedule</SectionTitle>
-                    <CardContainer>
-                        <div className="col-span-full p-8 border-2 border-dashed border-yellow-200 bg-yellow-50 rounded-xl text-center text-yellow-700">
-                            <span className="text-xl mb-2 block">⏳</span>
-                            Your account is currently pending verification by an administrator.<br/>
-                            You will be able to view and manage your schedule once approved.
-                        </div>
-                    </CardContainer>
-
-                    <WeekSection>
-                        <SectionTitle>For the Week</SectionTitle>
-                        <InsightText>
-                            Your weekly schedule will appear here once your account is verified.
-                        </InsightText>
-                    </WeekSection>
+                    </div>
                 </MainContent>
             </LayoutContainer>
         );
@@ -522,6 +502,31 @@ const Schedule: React.FC = () => {
                     </Breadcrumb>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <button
+                            onClick={handleAdapt}
+                            disabled={adapting}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                padding: '0.5rem 1rem', borderRadius: '0.5rem',
+                                border: 'none', background: '#4F46E5',
+                                color: 'white', fontSize: '0.85rem', fontWeight: 600,
+                                cursor: adapting ? 'not-allowed' : 'pointer',
+                                opacity: adapting ? 0.6 : 1,
+                                transition: 'all 0.2s',
+                            }}
+                        >
+                            {adapting ? (
+                                <>
+                                    <svg style={{ animation: 'spin 1s linear infinite', width: 16, height: 16 }} viewBox="0 0 24 24" fill="none">
+                                        <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                        <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                                    </svg>
+                                    Adapting...
+                                </>
+                            ) : (
+                                '✨ Adapt Schedule'
+                            )}
+                        </button>
                         <button
                             onClick={handleRegenerate}
                             disabled={regenerating}

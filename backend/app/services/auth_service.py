@@ -110,6 +110,7 @@ class AuthService:
             new_user = User(
                 username=data.get('username'),
                 email=email,
+                phone=data.get('phone'),
                 hashed_password=generate_password_hash(password),
                 level=data.get('level', 100),
                 role=role,
@@ -165,9 +166,14 @@ class AuthService:
         if '@' in identifier:
             user = User.query.filter_by(email=identifier.strip().lower()).first()
         else:
-            user = User.query.filter_by(username=identifier.strip()).first()
+            # Case-insensitive username lookup for PostgreSQL compatibility
+            from sqlalchemy import func
+            user = User.query.filter(
+                func.lower(User.username) == identifier.strip().lower()
+            ).first()
         
         if user and check_password_hash(user.hashed_password, password):
             return user, "Login successful"
             
         return None, "Invalid credentials"
+

@@ -21,6 +21,7 @@ interface SessionHistoryItem {
     session_insight: string;
     mood_after: number | null;
     would_repeat: boolean | null;
+    completed_on_time: boolean | null;
 }
 
 interface UserProfile {
@@ -57,6 +58,39 @@ interface UserCourse {
     name: string;
     credits: number;
     weight: number;
+}
+
+interface AdaptationEntry {
+    course_code: string;
+    course_name: string;
+    change_type: string;
+    from: string;
+    to: string;
+    trigger: string;
+    explanation: string;
+}
+
+interface PreservedEntry {
+    course_code: string;
+    course_name: string;
+    reason: string;
+}
+
+interface AdaptationLogItem {
+    id: number;
+    created_at: string;
+    week_label: string;
+    summary: string;
+    reasoning: {
+        adaptations: AdaptationEntry[];
+        preserved: PreservedEntry[];
+        context_flags: {
+            burnout_risk: string;
+            avg_session_efficacy: number;
+            dominant_environment: string;
+            session_location_consistency: number;
+        };
+    };
 }
 
 // ─── Value Transformers ────────────────────────────────────────
@@ -106,6 +140,7 @@ const Profile: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [showAllCourses, setShowAllCourses] = useState(false);
     const [expandedSession, setExpandedSession] = useState<number | null>(null);
+    const [adaptationLogs, setAdaptationLogs] = useState<AdaptationLogItem[]>([]);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -123,6 +158,11 @@ const Profile: React.FC = () => {
             })
             .catch(err => console.error(err))
             .finally(() => setLoading(false));
+
+        // Fetch adaptation logs separately (non-blocking)
+        api.get<{ logs: AdaptationLogItem[] }>('/schedule/adaptation-log')
+            .then(res => setAdaptationLogs(res.logs))
+            .catch(() => setAdaptationLogs([]));
     }, []);
 
     if (loading) return <div className="flex h-screen items-center justify-center text-gray-400">Loading...</div>;
@@ -231,6 +271,97 @@ const Profile: React.FC = () => {
                     </div>
                 </div>
 
+                {/* ─── Why Your Schedule Changed ─────────────────────── */}
+                {adaptationLogs.length > 0 && (
+                    <div className="mt-8 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                        <div className="flex items-center space-x-3 mb-6">
+                            <Brain className="text-indigo-500" size={22} />
+                            <h3 className="text-lg font-bold text-gray-900">Why Your Schedule Changed</h3>
+                        </div>
+
+                        {(() => {
+                            const log = adaptationLogs[0];
+                            const { adaptations, preserved, context_flags } = log.reasoning;
+                            return (
+                                <div>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="text-sm font-medium text-indigo-600">{log.week_label}</span>
+                                        <span className="text-xs text-gray-400">{new Date(log.created_at).toLocaleDateString()}</span>
+                                    </div>
+                                    <p className="text-sm text-gray-500 mb-4">{log.summary}</p>
+
+                                    <div className="flex flex-wrap gap-2 mb-4">
+                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${context_flags.burnout_risk === 'High' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                                            Burnout Risk: {context_flags.burnout_risk}
+                                        </span>
+                                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                            Avg Score: {context_flags.avg_session_efficacy.toFixed(1)}/5
+                                        </span>
+                                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                                            {context_flags.dominant_environment}
+                                        </span>
+                                    </div>
+
+                                    {adaptations.length > 0 && (
+                                        <div className="mb-4">
+                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Changes Made</p>
+                                            <div className="space-y-3">
+                                                {adaptations.map((a, i) => (
+                                                    <div key={i} className="bg-amber-50 rounded-lg p-3">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-sm font-semibold text-gray-800">{a.course_name}</span>
+                                                            <span className="text-xs text-gray-400 line-through">{a.from}</span>
+                                                            <span className="text-xs text-gray-400">&rarr;</span>
+                                                            <span className="text-xs font-medium text-indigo-600">{a.to}</span>
+                                                        </div>
+                                                        <p className="text-xs text-gray-600">{a.explanation}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {preserved.length > 0 && (
+                                        <div>
+                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Kept the Same</p>
+                                            <div className="space-y-1">
+                                                {preserved.map((p, i) => (
+                                                    <div key={i} className="flex items-start gap-2">
+                                                        <span className="text-green-500 mt-0.5">&#10003;</span>
+                                                        <p className="text-xs text-gray-600">
+                                                            <span className="font-medium">{p.course_name}</span> &mdash; {p.reason}
+                                                        </p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+
+                        {adaptationLogs.length > 1 && (
+                            <details className="group mt-4">
+                                <summary className="text-sm text-gray-500 hover:text-gray-700 cursor-pointer list-none flex items-center gap-1">
+                                    <span className="group-open:rotate-90 transition-transform inline-block">&#9654;</span>
+                                    Previous adaptations ({adaptationLogs.length - 1})
+                                </summary>
+                                <div className="space-y-2 mt-2">
+                                    {adaptationLogs.slice(1).map(log => (
+                                        <div key={log.id} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-sm font-medium text-gray-700">{log.week_label}</span>
+                                                <span className="text-xs text-gray-400">{new Date(log.created_at).toLocaleDateString()}</span>
+                                            </div>
+                                            <p className="text-xs text-gray-500 mt-1">{log.summary}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </details>
+                        )}
+                    </div>
+                )}
+
                 {/* ─── Section 2: Adaptation Insights ──────────────────── */}
                 {profile?.adaptation_insights && profile.adaptation_insights.length > 0 && (
                     <div className="mt-8 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
@@ -305,6 +436,13 @@ const Profile: React.FC = () => {
                                                     <p className="text-sm font-bold text-blue-700">{s.success_score}/5</p>
                                                     <p className="text-[10px] text-gray-400">{s.duration_minutes}min</p>
                                                 </div>
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                                    s.completed_on_time
+                                                        ? 'bg-green-100 text-green-700'
+                                                        : 'bg-gray-100 text-gray-500'
+                                                }`}>
+                                                    {s.completed_on_time ? 'Completed' : 'Ended Early'}
+                                                </span>
                                                 <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                                             </div>
                                         </div>

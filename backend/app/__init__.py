@@ -1,15 +1,22 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from flask_mail import Mail
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from config import Config
 
 db = SQLAlchemy()
 migrate = Migrate()
 jwt = JWTManager()
 mail = Mail()
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -19,19 +26,29 @@ def create_app(config_class=Config):
     migrate.init_app(app, db)
     jwt.init_app(app)
     mail.init_app(app)
-    # Allow specific origins for frontend (Vite defaults to 5173, but can shift to 5174, 5175)
-    allowed_origins = [
-        "http://localhost:5173", "http://127.0.0.1:5173",
-        "http://localhost:5174", "http://127.0.0.1:5174",
-        "http://localhost:5175", "http://127.0.0.1:5175"
-    ]
+    limiter.init_app(app)
+
+    # === TEMPORARY MAIL CONFIG DEBUG (remove after diagnosis) ===
+    print("=== MAIL CONFIG DEBUG ===")
+    print(f"MAIL_SERVER: {app.config.get('MAIL_SERVER')}")
+    print(f"MAIL_PORT: {app.config.get('MAIL_PORT')}")
+    print(f"MAIL_USE_TLS: {app.config.get('MAIL_USE_TLS')}")
+    print(f"MAIL_USERNAME: {app.config.get('MAIL_USERNAME')}")
+    pw = app.config.get('MAIL_PASSWORD', '')
+    print(f"MAIL_PASSWORD set: {'YES (' + str(len(pw)) + ' chars)' if pw else 'NO - THIS IS THE PROBLEM'}")
+    print(f"MAIL_DEFAULT_SENDER: {app.config.get('MAIL_DEFAULT_SENDER')}")
+    print(f"MAIL_SUPPRESS_SEND: {app.config.get('MAIL_SUPPRESS_SEND')}")
+    print(f"TESTING: {app.config.get('TESTING')}")
+    print("=========================")
     CORS(app, resources={
         r"/*": {
-            "origins": allowed_origins,
-            "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"]
+            "origins": [
+                "http://localhost:5173",
+                "http://localhost:3000"
+            ],
+            "supports_credentials": True
         }
-    }, supports_credentials=True)
+    })
 
     # Register blueprints 
     from app.routes.auth_routes import auth_bp
@@ -48,7 +65,7 @@ def create_app(config_class=Config):
 
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(dashboard_bp, url_prefix='/dashboard')
-    app.register_blueprint(session_bp, url_prefix='/session')
+    app.register_blueprint(session_bp, url_prefix='/sessions')
     app.register_blueprint(schedule_bp, url_prefix='/schedule')
     app.register_blueprint(knowledge_bp, url_prefix='/knowledge')
     app.register_blueprint(note_bp, url_prefix='/notes')
@@ -70,5 +87,16 @@ def create_app(config_class=Config):
         FCMService.initialize_firebase()
     except Exception as e:
         print(f"[APP] Firebase init failed (push disabled): {e}")
+
+    # ── Rate limit exceeded handler (HTTP 429) ──
+    from flask_limiter.errors import RateLimitExceeded
+
+    @app.errorhandler(RateLimitExceeded)
+    def handle_rate_limit(e):
+        return jsonify({
+            "error": "Too many requests",
+            "message": "You are being rate limited. Please wait before trying again.",
+            "retry_after": e.description
+        }), 429
 
     return app

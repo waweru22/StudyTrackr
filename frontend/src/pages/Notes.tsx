@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import Sidebar from '../components/Sidebar';
+import MiniTimer from '../components/MiniTimer';
 import { api, BASE_URL } from '../api/client';
 import { useUser } from '../context/UserContext';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Plus, Upload, FileText, X, Save, File, Trash2, ChevronLeft, Eye } from 'lucide-react';
 
 // --- Types ---
@@ -280,6 +282,32 @@ const ViewerBody = styled.div`
 
 const Notes: React.FC = () => {
     const { user } = useUser();
+    const location = useLocation();
+    const navigate = useNavigate();
+    const timerState = location.state as { fromTimer?: boolean; courseName?: string; courseCode?: string; courseId?: number } | null;
+    const fromTimer = timerState?.fromTimer === true;
+    const [hasActiveSession, setHasActiveSession] = useState(
+        () => !!localStorage.getItem('session_end_time')
+    );
+
+    // Re-check every 5s so the MiniTimer → Back button transition is automatic
+    useEffect(() => {
+        if (!fromTimer) return;
+        const id = setInterval(() => {
+            const endTime = parseInt(localStorage.getItem('session_end_time') || '0');
+            setHasActiveSession(endTime > Date.now());
+        }, 5000);
+        return () => clearInterval(id);
+    }, [fromTimer]);
+
+    const handleBackToTimer = () => {
+        const saved = localStorage.getItem('session_state');
+        navigate('/session-timer', {
+            state: saved ? JSON.parse(saved) : timerState,
+            replace: true
+        });
+    };
+
     const [view, setView] = useState<'list' | 'create' | 'edit'>('list');
     const [notes, setNotes] = useState<Note[]>([]);
     const [loading, setLoading] = useState(true);
@@ -295,7 +323,7 @@ const Notes: React.FC = () => {
     const [uploading, setUploading] = useState(false);
     const [viewingFile, setViewingFile] = useState<Note | null>(null);
 
-    // Fetch Notes
+    // Fetch Notes — same fetch regardless of entry path (sidebar or timer)
     const fetchNotes = async () => {
         setLoading(true);
         try {
@@ -313,7 +341,9 @@ const Notes: React.FC = () => {
     }, []);
 
     const handleCreate = () => {
-        setCurrentNote({ title: '', content: '' });
+        // Pre-populate courseId if coming from the timer
+        const courseId = timerState?.courseId;
+        setCurrentNote({ title: '', content: '', ...(courseId ? { course_id: courseId } : {}) });
         setView('create');
     };
 
@@ -408,8 +438,33 @@ const Notes: React.FC = () => {
 
     return (
         <LayoutContainer>
-            <Sidebar />
-            <MainContent>
+            {/* Sidebar: hidden when accessed from timer */}
+            {!fromTimer && <Sidebar />}
+
+            {/* Mini timer floating widget — shows only when session is still active */}
+            {fromTimer && hasActiveSession && (
+                <MiniTimer
+                    courseName={timerState?.courseName || 'Study Session'}
+                    onBackToTimer={handleBackToTimer}
+                />
+            )}
+
+            {/* Always show Back to Timer button when entered from timer */}
+            {fromTimer && !hasActiveSession && (
+                <div style={{
+                    position: 'fixed', top: '16px', left: '50%',
+                    transform: 'translateX(-50%)', zIndex: 9999
+                }}>
+                    <button
+                        onClick={handleBackToTimer}
+                        className="flex items-center gap-2 bg-white border border-gray-200 shadow-lg rounded-full px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                        ← Back to Timer
+                    </button>
+                </div>
+            )}
+
+            <MainContent style={fromTimer ? { marginLeft: 0, paddingTop: '4rem' } : undefined}>
                 {/* Header */}
                 <TopBar>
                     {view === 'list' ? (

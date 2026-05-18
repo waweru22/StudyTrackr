@@ -12,7 +12,9 @@ class User(db.Model):
     # Access Control
     role = db.Column(db.String(20), default='student') # 'student', 'admin'
     staff_id = db.Column(db.String(50), nullable=True) # Only for admins
-    is_verified = db.Column(db.Boolean, default=False) # Students require admin verification
+    is_verified = db.Column(db.Boolean, default=False) # Email verification status
+    verification_token = db.Column(db.String(100), nullable=True)
+    token_expires_at = db.Column(db.DateTime, nullable=True)
     
     # Inference Engine Profiles
     learning_style = db.Column(db.String(20)) # VARK

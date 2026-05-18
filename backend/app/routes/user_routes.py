@@ -199,4 +199,5 @@ def get_session_history():
         'session_insight': s.session_insight or '',
         'mood_after': s.mood_after,
         'would_repeat': s.would_repeat,
+        'completed_on_time': s.completed_on_time,
     } for s in sessions]), 200

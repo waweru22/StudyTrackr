@@ -12,7 +12,7 @@ import type { DashboardData, FeedItem } from '../types';
 
 
 const Dashboard: React.FC = () => {
-    const { level, semester } = useUser();
+    const { user, level, semester } = useUser();
     const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
     const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -80,7 +80,9 @@ const Dashboard: React.FC = () => {
     };
 
     const timeAgo = (dateStr: string): string => {
-        const diffMs = Date.now() - new Date(dateStr).getTime();
+        // Server sends ISO timestamps without Z suffix — parse as UTC
+        const utcStr = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
+        const diffMs = Date.now() - new Date(utcStr).getTime();
         const mins = Math.floor(diffMs / 60000);
         if (mins < 1) return 'Just now';
         if (mins < 60) return `${mins}m ago`;
@@ -123,12 +125,12 @@ const Dashboard: React.FC = () => {
                             </div>
                             <div>
                                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Level</p>
-                                <p className="text-sm font-bold text-blue-700">{dashboardData?.user?.level || level}</p>
+                                <p className="text-sm font-bold text-blue-700">{user?.level || level}</p>
                             </div>
                         </div>
                     </div>
                     <div className="flex items-center space-x-3">
-                        <span className="text-sm font-bold text-gray-900">{dashboardData?.user?.username || 'Student'}</span>
+                        <span className="text-sm font-bold text-gray-900">{user?.username || 'Student'}</span>
                         <div className="h-10 w-10 rounded-full bg-pink-500 overflow-hidden border-2 border-white shadow-sm flex items-center justify-center">
                             <span className="text-lg">👨🏾‍🎓</span>
                         </div>

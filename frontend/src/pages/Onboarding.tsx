@@ -22,8 +22,10 @@ const Onboarding: React.FC = () => {
 
     const [errors, setErrors] = useState<Record<string, string>>({});
 
+    const STUDENT_EMAIL_PATTERN = /^\d{8,10}@nileuniversity\.edu\.ng$/;
+
     const validateEmail = (email: string) => {
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        return STUDENT_EMAIL_PATTERN.test(email.trim().toLowerCase());
     };
 
     const getPasswordRequirements = (password: string) => [
@@ -37,11 +39,11 @@ const Onboarding: React.FC = () => {
         let { name, value } = e.target;
 
         if (name === 'phone') {
-            // Remove non-numeric characters
-            value = value.replace(/\D/g, '');
-            // Limit to 11 digits
-            if (value.length > 11) {
-                value = value.slice(0, 11);
+            // Allow numbers and spaces
+            value = value.replace(/[^\d\s]/g, '');
+            // Limit to 11 digits (excluding spaces)
+            if (value.replace(/\s/g, '').length > 11) {
+                return;
             }
         }
 
@@ -77,7 +79,7 @@ const Onboarding: React.FC = () => {
         if (!formData.email.trim()) {
             newErrors.email = "Email is required";
         } else if (!validateEmail(formData.email)) {
-            newErrors.email = "Please enter a valid email address";
+            newErrors.email = "Please use your Nile University student email (e.g. 20222208@nileuniversity.edu.ng)";
         }
 
         if (!formData.username.trim()) {
@@ -86,8 +88,12 @@ const Onboarding: React.FC = () => {
 
         if (!formData.phone.trim()) {
             newErrors.phone = "Phone number is required";
-        } else if (formData.phone.length !== 11) {
-            newErrors.phone = "Phone number must be exactly 11 digits";
+        } else {
+            const digits = formData.phone.replace(/\s+/g, '').replace(/^0/, '');
+            const NIGERIAN_PHONE = /^[789][01]\d{8}$/;
+            if (!NIGERIAN_PHONE.test(digits)) {
+                newErrors.phone = "Please enter a valid Nigerian phone number (e.g. 801 234 5678)";
+            }
         }
 
         if (!formData.level) {
@@ -173,7 +179,12 @@ const Onboarding: React.FC = () => {
                             type="email"
                             value={formData.email}
                             onChange={handleChange}
-                            placeholder="e.g. xxxxxxxx@nileuniversity.edu.ng"
+                            onBlur={() => {
+                                if (formData.email.trim() && !validateEmail(formData.email)) {
+                                    setErrors(prev => ({ ...prev, email: 'Please use your Nile University student email (e.g. 20222208@nileuniversity.edu.ng)' }));
+                                }
+                            }}
+                            placeholder="e.g. 20222208@nileuniversity.edu.ng"
                             className={`w-full px-4 py-3 rounded-lg border ${errors.email ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400 text-sm transition-shadow shadow-sm`}
                         />
                         {errors.email && (
@@ -211,14 +222,20 @@ const Onboarding: React.FC = () => {
                             <label className="block text-base font-medium font-dm-sans text-gray-700">
                                 Phone Number <span className="text-red-600">*</span>
                             </label>
-                            <input
-                                name="phone"
-                                type="tel"
-                                value={formData.phone}
-                                onChange={handleChange}
-                                placeholder="e.g. 0802 xxx 1234"
-                                className={`w-full px-4 py-3 rounded-lg border ${errors.phone ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400 text-sm transition-shadow shadow-sm`}
-                            />
+                            <div className="flex items-center w-full px-4 py-3 rounded-lg border bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-shadow shadow-sm ${errors.phone ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}">
+                                <span className="text-sm select-none mr-2 border-r pr-2 border-gray-300 text-gray-700">
+                                    +234
+                                </span>
+                                <input
+                                    name="phone"
+                                    type="tel"
+                                    value={formData.phone}
+                                    onChange={handleChange}
+                                    placeholder="801 234 5678"
+                                    maxLength={13} // 11 digits + spaces
+                                    className="w-full focus:outline-none placeholder-gray-400 text-sm bg-transparent"
+                                />
+                            </div>
                             {errors.phone && (
                                 <p className="text-red-600 text-sm font-medium mt-1 flex items-center">
                                     <AlertCircle size={14} className="mr-1" />
@@ -330,7 +347,8 @@ const Onboarding: React.FC = () => {
                     <div className="pt-2">
                         <button
                             type="submit"
-                            className="w-full flex items-center justify-center space-x-2 bg-blue-800 hover:bg-blue-900 text-white font-semibold font-dm-sans text-base py-3.5 rounded-lg shadow-sm transition-all transform active:scale-[0.99]"
+                            disabled={!!(formData.email.trim() && !validateEmail(formData.email))}
+                            className={`w-full flex items-center justify-center space-x-2 font-semibold font-dm-sans text-base py-3.5 rounded-lg shadow-sm transition-all transform active:scale-[0.99] ${formData.email.trim() && !validateEmail(formData.email) ? 'bg-gray-400 cursor-not-allowed text-white' : 'bg-blue-800 hover:bg-blue-900 text-white'}`}
                         >
                             <span>Continue</span>
                             <ArrowRight size={18} />

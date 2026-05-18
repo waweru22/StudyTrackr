@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Battery, BatteryMedium, BatteryLow, User, Users, Eye, Ear, NotebookPen, Book, Laptop, Tablet, Smartphone, Hand } from 'lucide-react';
+import { api } from '../api/client';
 import type { SessionBlock } from '../types';
 
 interface SessionModalProps {
@@ -24,7 +25,7 @@ const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose, session })
 
     const isPomodoro = session?.technique_name?.toLowerCase().includes('pomodoro');
 
-    const handleStart = () => {
+    const handleStart = async () => {
         if (!vibe) {
             setError('Please select your current vibe.');
             return;
@@ -64,8 +65,48 @@ const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose, session })
             durationMinutes = endMin - startMin;
         }
 
+        // API call to mark block as active and create a StudySession record
+        let studySessionId: number | undefined;
+        let courseId: number | undefined;
+        if (session?.id) {
+            try {
+                // 1. Mark the schedule block as active, get course_id back
+                const startRes = await api.post<{ course_id: number }>(`/schedule/${session.id}/start`, {});
+                localStorage.setItem(`block_started_${session.id}`, 'true');
+                courseId = startRes.course_id;
+
+                // 2. Create a StudySession record so it appears in Recent Sessions
+                const sessionRes = await api.post<{ session_id: number }>('/sessions/start', {
+                    course_id: courseId,
+                    session_goal: goal || 'Focus on material',
+                    vibe: vibe,
+                    social_setting: social,
+                    learning_mode: learningMode,
+                    medium: learningMedium,
+                    environment: environment === 'Other' ? otherEnvironment : environment,
+                });
+                studySessionId = sessionRes.session_id;
+            } catch (err) {
+                console.error("Failed to start session on backend", err);
+                setError("Failed to start session. Please try again.");
+                return;
+            }
+        }
+
         // Proceed with session start
         onClose();
+
+        // Technique-aware totalSets calculation
+        const techniqueLower = (session?.technique_name || '').toLowerCase();
+        let totalSets: number | undefined;
+        if (techniqueLower.includes('pomodoro')) {
+            totalSets = pomoLoops;
+        } else if (techniqueLower.includes('recall')) {
+            totalSets = Math.max(1, Math.round(durationMinutes / 55));
+        } else if (techniqueLower.includes('deep')) {
+            totalSets = 1;
+        }
+
         navigate('/session-timer', {
             state: {
                 courseName: session?.course_title || 'General Study',
@@ -73,7 +114,10 @@ const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose, session })
                 durationMinutes: durationMinutes,
                 technique: session?.technique_name || 'Standard',
                 goal: goal || 'Focus on material',
-                pomoLoops: isPomodoro ? pomoLoops : undefined
+                blockId: session?.id,
+                studySessionId: studySessionId,
+                courseId: courseId,
+                totalSets: totalSets
             }
         });
     };

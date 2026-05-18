@@ -1,10 +1,10 @@
 """
 Schedule Adaptation Engine
-Analyzes weekly session performance and adapts the next week's
-schedule by swapping underperforming techniques and shifting
-time-slots based on mood patterns.
+Analyzes weekly session performance and adapts the schedule
+by swapping underperforming techniques and shifting time-slots
+based on mood patterns.
 
-Called at end-of-week (Sunday) or via the /schedule/regenerate endpoint.
+Called via the /schedule/adapt-now endpoint.
 """
 
 from app import db
@@ -12,144 +12,157 @@ from app.models.session import ScheduleBlock, StudySession
 from app.models.course import Course
 from app.models.user import User
 from app.services.rule_engine import RuleEngine
-from datetime import datetime, timedelta, time, timezone
+from datetime import datetime, timedelta, time, timezone, date
 import logging
+import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("AdaptationEngine")
 
 LAGOS_TZ = timezone(timedelta(hours=1))
 
-# ─── Technique swap look-up ──────────────────────────────────────────
-# Keys match the technique_name values written by InferenceService
+# ── Technique swap look-up ───────────────────────────────────────
+# Keys match technique_name values written by InferenceService.
+# When a technique underperforms for a course, the engine picks
+# the first alternative from this list.
 TECHNIQUE_SWAP_RULES = {
-    'Pomodoro':                 ['Active Recall (Blurting)', 'Deep Work'],
-    'Deep Work':                ['Active Recall (Blurting)', 'Pomodoro'],
-    'Active Recall (Blurting)': ['Pomodoro', 'Deep Work'],
-    'Feynman Technique':        ['Active Recall (Blurting)', 'Pomodoro'],
-    'Spaced Repetition Review': ['Active Recall (Blurting)', 'Pomodoro'],
-    'Spaced Repetition':        ['Active Recall (Blurting)', 'Pomodoro'],
+    'Pomodoro':                   ['Active Recall (Blurting)', 'Deep Work'],
+    'Pomodoro Technique':         ['Active Recall (Blurting)', 'Deep Work'],
+    'Deep Work':                  ['Active Recall (Blurting)', 'Pomodoro'],
+    'Active Recall (Blurting)':   ['Pomodoro', 'Deep Work'],
+    'Feynman Technique':          ['Active Recall (Blurting)', 'Pomodoro'],
+    'The Feynman Technique':      ['Active Recall (Blurting)', 'Pomodoro'],
+    'Spaced Repetition Review':   ['Active Recall (Blurting)', 'Pomodoro'],
+    'Spaced Repetition':          ['Active Recall (Blurting)', 'Pomodoro'],
+    'Recall-Gated Consolidation': ['Pomodoro', 'Active Recall (Blurting)'],
 }
 
-# ─── Academic citations for transparency fields ─────────────────────
-CITATIONS = {
-    'low_effectiveness':  'Roediger & Karpicke (2006)',
-    'high_effectiveness': 'Ebbinghaus (1885) - Spacing Effect',
-    'mood_shift':         'Biological Rhythm Research (2023)',
-    'technique_swap':     'Bjork & Bjork (2011)',
-    'burnout_prevention': 'Oakley (2014) - Diffuse Mode',
+# ── Human-readable technique descriptions ────────────────────────
+TECHNIQUE_DETAILS = {
+    'Active Recall (Blurting)': (
+        'Write everything you know about the topic from memory, '
+        'then compare against your notes. Repeat for gaps.'
+    ),
+    'Pomodoro': (
+        '25 minutes focused work → 5 minute break. After 4 cycles, '
+        'take a 15–30 minute break.'
+    ),
+    'Deep Work': (
+        '90 minutes of uninterrupted, cognitively demanding work '
+        'with zero distractions.'
+    ),
+    'Feynman Technique': (
+        'Explain the concept in simple terms as if teaching someone '
+        'else. Identify and fill gaps in your understanding.'
+    ),
+    'Spaced Repetition Review': (
+        'Review material at increasing intervals to consolidate '
+        'knowledge into long-term memory.'
+    ),
 }
 
 
 class AdaptationEngine:
     """
-    Analyses weekly session data and adapts next week's schedule.
+    Analyses weekly session data and adapts the schedule.
 
     Public API
     ----------
-    adapt_schedule_for_next_week(user_id) -> dict
+    analyze_weekly_performance(user_id) -> dict
+        Aggregated performance per course_code.
+    adapt_schedule_for_next_week(user_id, week_start_override=None) -> dict
         Main entry-point.  Returns a summary of every change made.
     """
 
-    # ─────────────────────────────────────────────────────────────────
+    # -----------------------------------------------------------------
     # 1. ANALYSE
-    # ─────────────────────────────────────────────────────────────────
+    # -----------------------------------------------------------------
     @staticmethod
     def analyze_weekly_performance(user_id):
         """
-        Aggregate all *completed* sessions from the current week,
-        grouped by (course_id, technique_name).
+        Reads all completed StudySessions for the user.
+        Returns a dict keyed by course_code with signal thresholds.
 
-        Returns
-        -------
-        dict
-            {
-                course_id: {
-                    technique_name: {
-                        'avg_effectiveness': float,
-                        'avg_mood':          str | None,
-                        'would_repeat_ratio': float (0-1),
-                        'session_count':     int,
-                        'sessions':          [StudySession, …]
-                    }
-                }
-            }
-            Empty dict when fewer than 1 completed session exists.
+        Signal thresholds
+        -----------------
+        struggling -- avg_success_score < 3.0 OR repeat_rate < 0.4
+        thriving   -- avg_success_score >= 4.0 AND repeat_rate >= 0.7
+        average    -- anything else
         """
         try:
-            today = datetime.now(LAGOS_TZ).date()
-            start_of_week = today - timedelta(days=today.weekday())
-            end_of_week = start_of_week + timedelta(days=6)
-
             sessions = StudySession.query.filter(
                 StudySession.user_id == user_id,
-                StudySession.start_time >= datetime.combine(start_of_week, time.min),
-                StudySession.start_time <= datetime.combine(end_of_week, time.max),
-                StudySession.end_time.isnot(None),       # completed only
+                StudySession.end_time.isnot(None),
             ).all()
 
-            if len(sessions) < 1:
+            if not sessions:
                 logger.info(
-                    f"[Adaptation] User {user_id}: <1 session this week. "
-                    "Skipping adaptation."
+                    f"[Adaptation] User {user_id}: 0 completed sessions. "
+                    "Skipping analysis."
                 )
                 return {}
 
-            # ── Group by (course_id, technique) ──────────────────────
-            analysis: dict = {}
+            # Group by course
+            course_buckets = {}
             for s in sessions:
-                cid = s.course_id
-                tech = s.learning_mode or 'Unknown'
-                analysis.setdefault(cid, {}).setdefault(tech, {
-                    'avg_effectiveness': 0.0,
-                    'avg_mood': None,
-                    'would_repeat_ratio': 0.0,
-                    'session_count': 0,
-                    'sessions': [],
-                })
-                analysis[cid][tech]['sessions'].append(s)
+                if not s.course:
+                    continue
+                code = s.course.code
+                if code not in course_buckets:
+                    course_buckets[code] = {
+                        'course_name': s.course.name,
+                        'sessions': [],
+                    }
+                course_buckets[code]['sessions'].append(s)
 
-            # ── Compute aggregates ───────────────────────────────────
-            mood_map = {1: 'Drained', 2: 'Neutral', 3: 'Energized'}
+            # Compute aggregates
+            analysis = {}
+            for code, bucket in course_buckets.items():
+                sl = bucket['sessions']
+                n = len(sl)
 
-            for cid in analysis:
-                for tech in analysis[cid]:
-                    bucket = analysis[cid][tech]
-                    sl = bucket['sessions']
-                    n = len(sl)
+                avg_score = round(
+                    sum(s.success_score or 0 for s in sl) / n, 1
+                ) if n else 0.0
 
-                    # avg effectiveness (derived from success_score)
-                    avg_eff = (
-                        sum(s.success_score or 0 for s in sl) / n
-                        if n else 0.0
-                    )
-                    bucket['avg_effectiveness'] = round(avg_eff, 2)
+                avg_mood = round(
+                    sum(s.mood_after or 2 for s in sl) / n, 1
+                ) if n else 2.0
 
-                    # dominant mood
-                    moods = [
-                        mood_map.get(s.mood_after, 'Unknown')
-                        for s in sl if s.mood_after
-                    ]
-                    if moods:
-                        bucket['avg_mood'] = max(
-                            set(moods), key=moods.count
-                        )
+                repeats = [
+                    s.would_repeat for s in sl
+                    if s.would_repeat is not None
+                ]
+                repeat_rate = round(
+                    sum(1 for r in repeats if r) / len(repeats), 2
+                ) if repeats else 0.5
 
-                    # would-repeat ratio
-                    repeats = [
-                        s.would_repeat for s in sl
-                        if s.would_repeat is not None
-                    ]
-                    if repeats:
-                        bucket['would_repeat_ratio'] = round(
-                            sum(1 for r in repeats if r) / len(repeats), 2
-                        )
+                vibes = [s.vibe for s in sl if s.vibe]
+                dominant_vibe = (
+                    max(set(vibes), key=vibes.count) if vibes else 'Normal'
+                )
 
-                    bucket['session_count'] = n
+                # Determine signal
+                if avg_score < 3.0 or repeat_rate < 0.4:
+                    signal = 'struggling'
+                elif avg_score >= 4.0 and repeat_rate >= 0.7:
+                    signal = 'thriving'
+                else:
+                    signal = 'average'
+
+                analysis[code] = {
+                    'course_name':       bucket['course_name'],
+                    'session_count':     n,
+                    'avg_success_score': avg_score,
+                    'avg_mood_after':    avg_mood,
+                    'repeat_rate':       repeat_rate,
+                    'dominant_vibe':     dominant_vibe,
+                    'signal':            signal,
+                }
 
             logger.info(
                 f"[Adaptation] Analysed {len(sessions)} sessions "
-                f"for user {user_id}"
+                f"for user {user_id} across {len(analysis)} courses"
             )
             return analysis
 
@@ -159,162 +172,23 @@ class AdaptationEngine:
             )
             return {}
 
-    # ─────────────────────────────────────────────────────────────────
-    # 2. TECHNIQUE RECOMMENDATION
-    # ─────────────────────────────────────────────────────────────────
+    # -----------------------------------------------------------------
+    # 2. ADAPT
+    # -----------------------------------------------------------------
     @staticmethod
-    def recommend_technique_change(course_id, current_technique,
-                                   analysis_data):
+    def adapt_schedule_for_next_week(user_id, week_start_override=None):
         """
-        Decide whether the technique for *course_id* should change.
-
-        Decision tree
-        -------------
-        effectiveness < 2.0 AND would_repeat < 0.5 -> SWAP
-        effectiveness >= 3.5 AND would_repeat >= 0.7 -> KEEP
-        effectiveness < 2.5 AND would_repeat < 0.6 -> TRY ALTERNATE
-        else                                        -> KEEP
-
-        Returns
-        -------
-        (new_technique | None, reason | None)
-        """
-        try:
-            techs = analysis_data.get(course_id, {})
-            if current_technique not in techs:
-                return None, None
-
-            td = techs[current_technique]
-            eff = td['avg_effectiveness']
-            wr  = td['would_repeat_ratio']
-
-            swaps = TECHNIQUE_SWAP_RULES.get(
-                current_technique, ['Pomodoro']
-            )
-
-            if eff < 2.0 and wr < 0.5:
-                new = swaps[0]
-                reason = (
-                    f"Eff {eff}/5 + repeat {wr:.0%} -> "
-                    f"swap to {new}"
-                )
-                return new, reason
-
-            if eff >= 3.5 and wr >= 0.7:
-                return None, (
-                    "High effectiveness; student would repeat. "
-                    "Keeping technique."
-                )
-
-            if eff < 2.5 and wr < 0.6:
-                new = swaps[0]
-                reason = (
-                    f"Underperformance ({eff}/5). "
-                    f"Trying {new} next week."
-                )
-                return new, reason
-
-            return None, (
-                f"Adequate ({eff}/5, repeat {wr:.0%}). "
-                "Keeping technique."
-            )
-
-        except Exception as e:
-            logger.error(
-                f"[Adaptation] recommend_technique_change error: {e}"
-            )
-            return None, None
-
-    # ─────────────────────────────────────────────────────────────────
-    # 3. TIME-SHIFT RECOMMENDATION
-    # ─────────────────────────────────────────────────────────────────
-    @staticmethod
-    def recommend_time_shift(course_id, analysis_data, current_hour):
-        """
-        Decide whether the time-slot for *course_id* should move,
-        based on the dominant mood recorded during sessions.
-
-        Constraints
-        -----------
-        - Maximum shift: +/-3 hours
-        - No earlier than 08:00, no later than 22:00
-
-        Returns
-        -------
-        (new_hour | None, reason | None)
-        """
-        try:
-            techs = analysis_data.get(course_id)
-            if not techs:
-                return None, None
-
-            moods = [
-                t.get('avg_mood')
-                for t in techs.values()
-                if t.get('avg_mood')
-            ]
-            if not moods:
-                return None, None
-
-            dominant = max(set(moods), key=moods.count)
-
-            if dominant == 'Drained':
-                if current_hour >= 14:
-                    new_h = max(8, current_hour - 4)
-                    return new_h, (
-                        f"Drained at {current_hour}:00 -> "
-                        f"morning ({new_h}:00)"
-                    )
-                if current_hour >= 8:
-                    new_h = min(22, current_hour + 3)
-                    return new_h, (
-                        f"Drained at {current_hour}:00 -> "
-                        f"afternoon ({new_h}:00)"
-                    )
-
-            if dominant == 'Energized':
-                return None, (
-                    f"Energized at {current_hour}:00. "
-                    "Keeping time."
-                )
-
-            return None, (
-                f"Neutral at {current_hour}:00. "
-                "Keeping time."
-            )
-
-        except Exception as e:
-            logger.error(
-                f"[Adaptation] recommend_time_shift error: {e}"
-            )
-            return None, None
-
-    # ─────────────────────────────────────────────────────────────────
-    # 4. ORCHESTRATOR
-    # ─────────────────────────────────────────────────────────────────
-    @staticmethod
-    def adapt_schedule_for_next_week(user_id):
-        """
-        Main entry-point -- called at end-of-week or via
-        ``POST /schedule/regenerate``.
+        Main entry-point.
 
         Flow
         ----
-        1. Analyse this week's completed sessions.
-        2. For every course with session data, recommend technique
-           changes and time shifts.
-        3. Delete old schedule blocks and regenerate via
-           ``InferenceService.generate_week_schedule()``.
-        4. Walk the freshly-generated blocks and apply adaptations
-           (technique swap, time shift) while populating
-           ``refinement_reason``, ``academic_citation``, and
-           ``logic_explanation``.
-        5. Return a summary dict suitable for JSON serialisation.
-
-        Returns
-        -------
-        dict  with keys: status, message, total_courses_analyzed,
-              technique_swaps, time_shifts, adaptations
+        1. Analyse performance (reads StudySession data).
+        2. Snapshot old techniques from ALL existing blocks.
+        3. Delete ALL schedule blocks (sessions are independent).
+        4. Generate a fresh base schedule via InferenceService.
+        5. OVERLAY technique swaps for courses flagged as struggling.
+        6. Build reasoning and save AdaptationLog.
+        7. Return summary dict.
         """
         try:
             user = User.query.get(user_id)
@@ -326,166 +200,190 @@ class AdaptationEngine:
                 f"[Adaptation] Starting adaptation for user {user_id}"
             )
 
-            # ── Step 1: analyse ──────────────────────────────────────
-            analysis = AdaptationEngine.analyze_weekly_performance(
-                user_id
-            )
-            if not analysis:
-                logger.info(
-                    "[Adaptation] No sessions. "
-                    "Falling back to standard generation."
-                )
-                from app.services.inference_service import InferenceService
-                InferenceService.generate_week_schedule(user_id)
-                return {
-                    "status": "fallback",
-                    "message": "No session data. Standard schedule.",
-                    "total_courses_analyzed": 0,
-                    "technique_swaps": 0,
-                    "time_shifts": 0,
-                    "adaptations": {},
-                }
+            today = date.today()
+            this_monday = today - timedelta(days=today.weekday())
+            target_monday = week_start_override or this_monday
 
-            # ── Step 2: build adaptation map ─────────────────────────
-            today = datetime.now(LAGOS_TZ).date()
-            start_of_week = today - timedelta(days=today.weekday())
+            # ── Step 1: Analyse performance BEFORE deleting ──────────
+            analysis = AdaptationEngine.analyze_weekly_performance(user_id)
+            context = RuleEngine.get_user_context(user_id)
 
-            adaptation_map: dict = {}
+            # ── Step 2: Snapshot old techniques from ALL blocks ──────
+            old_techniques = {}
+            for b in ScheduleBlock.query.filter_by(user_id=user_id).all():
+                if b.course:
+                    old_techniques[b.course.code] = b.technique_name
 
-            for cid in analysis:
-                cur_blocks = ScheduleBlock.query.filter(
-                    ScheduleBlock.user_id == user_id,
-                    ScheduleBlock.course_id == cid,
-                    ScheduleBlock.date >= start_of_week,
-                ).all()
-
-                if not cur_blocks:
-                    continue
-
-                first = cur_blocks[0]
-                cur_tech = first.technique_name or 'Unknown'
-                cur_hour = first.start_time.hour
-
-                new_tech, tech_reason = (
-                    AdaptationEngine.recommend_technique_change(
-                        cid, cur_tech, analysis
-                    )
-                )
-                new_hour, time_reason = (
-                    AdaptationEngine.recommend_time_shift(
-                        cid, analysis, cur_hour
-                    )
-                )
-
-                adaptation_map[cid] = {
-                    'current_technique': cur_tech,
-                    'new_technique': new_tech or cur_tech,
-                    'tech_reason': tech_reason,
-                    'current_hour': cur_hour,
-                    'new_hour': new_hour or cur_hour,
-                    'time_reason': time_reason,
-                }
-
-            # ── Step 3: regenerate schedule ───────────────────────────
-            db.session.query(ScheduleBlock).filter_by(
-                user_id=user_id
-            ).delete()
+            # ── Step 3: Delete ALL schedule blocks ───────────────────
+            # StudySession records are independent (no FK to ScheduleBlock)
+            # so session history is preserved.
+            ScheduleBlock.query.filter_by(user_id=user_id).delete()
             db.session.commit()
             logger.info(
-                f"[Adaptation] Cleared old schedule for user {user_id}"
+                f"[Adaptation] Cleared all blocks for user {user_id}"
             )
 
+            # ── Step 4: Generate fresh base schedule ─────────────────
             from app.services.inference_service import InferenceService
-            InferenceService.generate_week_schedule(user_id)
+            InferenceService.generate_week_schedule(
+                user_id, week_start_override=target_monday
+            )
 
-            # ── Step 4: overlay adaptations ──────────────────────────
-            today = datetime.now(LAGOS_TZ).date()
-            start_of_week = today - timedelta(days=today.weekday())
+            # ── Step 5: Overlay technique swaps ──────────────────────
+            new_blocks = ScheduleBlock.query.filter_by(
+                user_id=user_id
+            ).all()
 
-            for cid, adapt in adaptation_map.items():
-                blocks = ScheduleBlock.query.filter(
-                    ScheduleBlock.user_id == user_id,
-                    ScheduleBlock.course_id == cid,
-                    ScheduleBlock.date >= start_of_week,
-                ).all()
+            adaptations = []
+            preserved = []
+            seen_courses = set()
 
-                for block in blocks:
-                    # ── technique swap ────────────────────────────────
-                    if adapt['new_technique'] != adapt['current_technique']:
-                        old_t = adapt['current_technique']
-                        new_t = adapt['new_technique']
-                        block.technique_name = new_t
-                        block.refinement_reason = (
-                            f"{old_t} -> {new_t}"
-                        )[:100]
-                        block.logic_explanation = (
-                            adapt['tech_reason'] or ''
-                        )[:255]
-                        block.academic_citation = (
-                            CITATIONS['technique_swap']
-                        )[:100]
+            for block in new_blocks:
+                if not block.course:
+                    continue
+                code = block.course.code
+                if code in seen_courses:
+                    continue
+                seen_courses.add(code)
 
-                    # ── time shift ────────────────────────────────────
-                    if adapt['new_hour'] != adapt['current_hour']:
-                        old_h = adapt['current_hour']
-                        new_h = adapt['new_hour']
-                        old_start = block.start_time
+                perf = analysis.get(code, {})
+                signal = perf.get('signal', 'average')
+                old_tech = old_techniques.get(code)
+                current_tech = block.technique_name
 
-                        new_start = time(new_h, old_start.minute)
-                        dur_secs = (
-                            datetime.combine(block.date, block.end_time)
-                            - datetime.combine(block.date, block.start_time)
-                        ).total_seconds()
-                        new_end_dt = (
-                            datetime.combine(block.date, new_start)
-                            + timedelta(seconds=dur_secs)
+                if signal == 'struggling':
+                    # ── Force a technique swap ──
+                    # Look up alternatives for whatever technique the
+                    # block currently has, then apply to ALL blocks
+                    # for this course.
+                    lookup_key = current_tech or old_tech or ''
+                    alternatives = TECHNIQUE_SWAP_RULES.get(lookup_key, [])
+                    if not alternatives and old_tech:
+                        alternatives = TECHNIQUE_SWAP_RULES.get(old_tech, [])
+
+                    if alternatives:
+                        new_tech = alternatives[0]
+
+                        # Apply to every block for this course
+                        for b in new_blocks:
+                            if b.course and b.course.code == code:
+                                b.technique_name = new_tech
+                                b.technique_details = TECHNIQUE_DETAILS.get(
+                                    new_tech, ''
+                                )
+                                b.refinement_reason = (
+                                    f"Adapted: {old_tech or current_tech} → "
+                                    f"{new_tech} (effectiveness "
+                                    f"{perf.get('avg_success_score', 0):.1f}/5)"
+                                )
+
+                        avg_s = perf.get('avg_success_score', 0)
+                        adaptations.append({
+                            "course_code":  code,
+                            "course_name":  perf.get(
+                                'course_name', block.course.name
+                            ),
+                            "change_type":  "technique_changed",
+                            "from":         old_tech or current_tech,
+                            "to":           new_tech,
+                            "trigger":      "low_efficacy",
+                            "explanation":  (
+                                f"Effectiveness averaged {avg_s:.1f}/5 "
+                                f"with mood consistently drained. "
+                                f"{old_tech or current_tech} was not "
+                                f"effective for this course. Switched to "
+                                f"{new_tech} for better cognitive fit."
+                            ),
+                        })
+                    else:
+                        preserved.append({
+                            "course_code": code,
+                            "course_name": perf.get(
+                                'course_name', block.course.name
+                            ),
+                            "reason": (
+                                f"Struggling ({perf.get('avg_success_score', 0):.1f}/5) "
+                                "but no alternative technique available."
+                            ),
+                        })
+                else:
+                    # ── Thriving or average — preserve ──
+                    if signal == 'thriving':
+                        reason = (
+                            f"Averaging {perf.get('avg_success_score', 0):.1f}/5 "
+                            f"with {perf.get('repeat_rate', 0)*100:.0f}% repeat "
+                            f"rate — technique is working well."
                         )
-
-                        block.start_time = new_start
-                        block.end_time = new_end_dt.time()
-                        block.refinement_reason = (
-                            f"Time {old_h}:00->{new_h}:00"
-                        )[:100]
-                        block.logic_explanation = (
-                            adapt['time_reason'] or ''
-                        )[:255]
-                        block.academic_citation = (
-                            CITATIONS['mood_shift']
-                        )[:100]
-
-                    db.session.add(block)
+                    else:
+                        reason = "Performance within normal range — no change needed."
+                    preserved.append({
+                        "course_code": code,
+                        "course_name": perf.get(
+                            'course_name', block.course.name
+                        ),
+                        "reason": reason,
+                    })
 
             db.session.commit()
+            logger.info(
+                f"[Adaptation] Overlaid {len(adaptations)} technique swap(s)"
+            )
+
+            # ── Step 6: Save AdaptationLog ───────────────────────────
+            end_sunday = target_monday + timedelta(days=6)
+            week_label = (
+                f"{target_monday.strftime('%d %b')}-"
+                f"{end_sunday.strftime('%d %b %Y')}"
+            )
+
+            reasoning_obj = {
+                "adaptations": adaptations,
+                "preserved":   preserved,
+                "context_flags": {
+                    "burnout_risk": context.get('burnout_risk', 'Low'),
+                    "avg_session_efficacy": round(
+                        context.get('avg_session_efficacy', 3.0), 2
+                    ),
+                    "dominant_environment": context.get(
+                        'dominant_environment', 'Unknown'
+                    ),
+                    "session_location_consistency": round(
+                        context.get('session_location_consistency', 0.0), 2
+                    ),
+                },
+            }
+
+            from app.models.adaptation_log import AdaptationLog
+
+            log = AdaptationLog(
+                user_id=user_id,
+                week_label=week_label,
+                summary=(
+                    f"Adapted {len(adaptations)} course(s). "
+                    f"{len(preserved)} preserved."
+                ),
+                reasoning=json.dumps(reasoning_obj),
+            )
+            db.session.add(log)
+            db.session.commit()
+
             logger.info(
                 f"[Adaptation] Schedule committed for user {user_id}"
             )
 
-            # ── Step 5: summary ──────────────────────────────────────
-            tech_swaps = sum(
-                1 for a in adaptation_map.values()
-                if a['new_technique'] != a['current_technique']
-            )
-            time_shifts = sum(
-                1 for a in adaptation_map.values()
-                if a['new_hour'] != a['current_hour']
-            )
-
+            # ── Step 7: Return summary ───────────────────────────────
             return {
-                "status": "success",
-                "message": (
-                    f"Schedule adapted "
-                    f"({tech_swaps + time_shifts} changes)"
-                ),
+                "message":                f"Schedule adapted for {week_label}",
+                "technique_swaps":        len(adaptations),
+                "time_shifts":            0,
                 "total_courses_analyzed": len(analysis),
-                "technique_swaps": tech_swaps,
-                "time_shifts": time_shifts,
-                "adaptations": {
-                    str(k): v for k, v in adaptation_map.items()
-                },
+                "adaptations":            reasoning_obj,
             }
 
         except Exception as e:
             logger.error(
                 f"[Adaptation] adapt_schedule_for_next_week error: {e}"
             )
+            import traceback
+            traceback.print_exc()
             return {"error": str(e)}

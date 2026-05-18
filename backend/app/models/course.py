@@ -22,13 +22,13 @@ class Course(db.Model):
 
 class StudyKnowledge(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    principle = db.Column(db.String(100), nullable=False)
-    rule_logic = db.Column(db.String(200)) # Internal logic trigger
+    principle = db.Column(db.String(255), nullable=False)
+    rule_logic = db.Column(db.String(255)) # Internal logic trigger
     content = db.Column(db.Text, nullable=False)
-    inference_trigger = db.Column(db.String(50)) # e.g., 'forgetting_curve'
-    academic_source = db.Column(db.String(100))
-    tags = db.Column(db.String(100)) # Comma-separated tags
-    rule_type = db.Column(db.String(20), default='schedule')  # 'schedule' or 'session'
+    inference_trigger = db.Column(db.Text) # e.g., 'forgetting_curve'
+    academic_source = db.Column(db.String(255))
+    tags = db.Column(db.String(255)) # Comma-separated tags
+    rule_type = db.Column(db.String(100), default='schedule')  # 'schedule' or 'session'
     student_instruction = db.Column(db.Text, nullable=True)
 
 class SavedResource(db.Model):

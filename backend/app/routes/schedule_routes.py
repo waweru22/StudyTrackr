@@ -1,6 +1,7 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.session import ScheduleBlock
+from app import limiter, db
 from datetime import datetime, timedelta
 
 schedule_bp = Blueprint('schedule', __name__)
@@ -15,8 +16,8 @@ def get_schedule():
     user = User.query.get(user_id)
     if user and user.role == 'student' and not user.is_verified:
         return jsonify({
-            "error": "Your account is pending verification by an administrator.",
-            "verification_pending": True
+            "error": "Please verify your email to access your schedule.",
+            "email_unverified": True
         }), 403
     # 1. Check for missed sessions (triggers penalties)
     from app.services.schedule_service import ScheduleService
@@ -28,20 +29,22 @@ def get_schedule():
     today = datetime.now(LAGOS_TZ).date()
     
     # 3. Inference-First: Regenerate if no future blocks or schedule is from a previous week
-    last_block = ScheduleBlock.query.filter(
-        ScheduleBlock.user_id == user_id,
-        ScheduleBlock.date >= today
-    ).order_by(ScheduleBlock.date.desc()).first()
+    # Auto-generate only for brand new users (zero blocks ever).
+    # Returning users get their next schedule via the Adapt Schedule button,
+    # which uses AdaptationEngine. This prevents silent regeneration from
+    # bypassing adaptation logic.
+    has_any_blocks = ScheduleBlock.query.filter_by(user_id=user_id).count() > 0
 
-    start_of_week = today - timedelta(days=today.weekday())
-    needs_regen = not last_block or last_block.date < start_of_week
-
-    if needs_regen:
+    if not has_any_blocks:
         from app.services.inference_service import InferenceService
         InferenceService.generate_week_schedule(user_id)
         
-    # Re-fetch Today's Blocks
-    blocks = ScheduleBlock.query.filter_by(user_id=user_id, date=today).order_by(ScheduleBlock.start_time.asc()).all()
+    # Support viewing a different week (e.g. after adaptation)
+    week_offset = int(request.args.get('week_offset', 0))
+    view_date = today + timedelta(weeks=week_offset)
+
+    # Re-fetch blocks for the view date
+    blocks = ScheduleBlock.query.filter_by(user_id=user_id, date=view_date).order_by(ScheduleBlock.start_time.asc()).all()
         
     # 4. Build Response with Status & Themes
     from app.models.session import StudySession
@@ -65,13 +68,9 @@ def get_schedule():
     
     today_blocks_data = []
     for block in blocks:
-        # Status from DB
-        status = block.status or "upcoming" 
-        
-        # Check if completed via Session as well
-        matching_session = next((s for s in todays_sessions if s.course_id == block.course_id), None)
-        if matching_session:
-             status = "completed"
+        # Trust the block's own status field.
+        # It is managed by the /start and /complete endpoints.
+        status = block.status or "upcoming"
              
         today_blocks_data.append({
             "id": block.id,
@@ -105,7 +104,7 @@ def get_schedule():
     # Let's align with the user request: "today... does not match...". 
     # If we only send tomorrow+, today is empty in the grid.
     
-    start_of_week = today - timedelta(days=today.weekday()) # Monday
+    start_of_week = view_date - timedelta(days=view_date.weekday()) # Monday
     end_of_week = start_of_week + timedelta(days=6) # Sunday
     
     week_blocks = ScheduleBlock.query.filter(
@@ -133,7 +132,10 @@ def get_schedule():
         
     return jsonify({
         "today_blocks": today_blocks_data,
-        "weekly_summary": weekly_summary
+        "weekly_summary": weekly_summary,
+        "viewing_week_offset": week_offset,
+        "week_start": start_of_week.isoformat(),
+        "week_end": end_of_week.isoformat(),
     }), 200
 
 @schedule_bp.route('/<int:block_id>/start', methods=['POST'])
@@ -148,7 +150,11 @@ def start_session(block_id):
     block.status = "active"
     db.session.commit()
     
-    return jsonify({"message": "Session started", "status": "active"}), 200
+    return jsonify({
+        "message": "Session started",
+        "status": "active",
+        "course_id": block.course_id
+    }), 200
 
 @schedule_bp.route('/<int:block_id>/complete', methods=['POST'])
 @jwt_required()
@@ -184,6 +190,7 @@ def complete_block(block_id):
 
 @schedule_bp.route('/regenerate', methods=['POST'])
 @jwt_required()
+@limiter.limit("20 per hour")
 def regenerate_schedule():
     """
     End-of-week regeneration endpoint.
@@ -270,4 +277,105 @@ def get_weekly_summary():
         'completed': completed_blocks,
         'missed': missed_blocks,
         'remaining': total_blocks - completed_blocks - missed_blocks
+    }), 200
+
+
+# ─── Block serializer ────────────────────────────────────────────────
+
+def _serialize_block(block):
+    """Shared serializer for ScheduleBlock -> dict."""
+    duration = int(
+        (datetime.combine(block.date, block.end_time) -
+         datetime.combine(block.date, block.start_time)).total_seconds() / 60
+    ) if block.date else 0
+
+    return {
+        "id":                       block.id,
+        "course_code":              block.course.code if block.course else "General",
+        "course_name":              block.course.name if block.course else "Personal Development",
+        "technique_name":           block.technique_name,
+        "technique_details":        block.technique_details,
+        "block_type":               block.block_type,
+        "suggested_environment":    block.suggested_environment,
+        "suggested_social_setting": block.suggested_social_setting,
+        "suggested_medium":         block.suggested_medium,
+        "start_time":               block.start_time.strftime("%H:%M") if block.start_time else None,
+        "end_time":                 block.end_time.strftime("%H:%M") if block.end_time else None,
+        "duration_minutes":         duration,
+        "status":                   block.status,
+    }
+
+
+# ─── Adapt-Now endpoint (demo button) ───────────────────────────────
+
+@schedule_bp.route('/adapt-now', methods=['POST'])
+@jwt_required()
+@limiter.limit("10 per hour")
+def adapt_schedule_now():
+    """
+    Used by the demo Adapt Schedule button.
+    Returns before/after comparison + reasoning in one response.
+    """
+    import json as _json
+    from app.services.inference_service_adaptation import AdaptationEngine
+    from app.models.adaptation_log import AdaptationLog
+
+    user_id = int(get_jwt_identity())
+
+    # 1. Snapshot Week 1 blocks before adaptation
+    week1_blocks = ScheduleBlock.query.filter_by(user_id=user_id, status='upcoming').all()
+    week1_data   = [_serialize_block(b) for b in week1_blocks]
+
+    # 2. Performance analysis (for frontend display)
+    analysis = AdaptationEngine.analyze_weekly_performance(user_id)
+
+    # 3. Run adaptation -- deletes upcoming blocks, generates new ones, saves AdaptationLog
+    result = AdaptationEngine.adapt_schedule_for_next_week(user_id)
+
+    # 4. Fetch newly generated blocks
+    week2_blocks = ScheduleBlock.query.filter_by(user_id=user_id, status='upcoming').all()
+    week2_data   = [_serialize_block(b) for b in week2_blocks]
+
+    # 5. Fetch the AdaptationLog just created
+    latest_log = AdaptationLog.query.filter_by(user_id=user_id)\
+                     .order_by(AdaptationLog.created_at.desc()).first()
+    reasoning = _json.loads(latest_log.reasoning) if latest_log else {}
+
+    return jsonify({
+        "week1":                week1_data,
+        "week1_analysis":       analysis,
+        "week2":                week2_data,
+        "adaptation_reasoning": reasoning,
+        "summary":              result,
+    }), 200
+
+
+# ─── Adaptation-Log endpoint (profile page) ─────────────────────────
+
+@schedule_bp.route('/adaptation-log', methods=['GET'])
+@jwt_required()
+def get_adaptation_log():
+    """Returns the last 5 adaptation logs for the current user."""
+    import json as _json
+    from app.models.adaptation_log import AdaptationLog
+
+    user_id = int(get_jwt_identity())
+
+    logs = AdaptationLog.query\
+        .filter_by(user_id=user_id)\
+        .order_by(AdaptationLog.created_at.desc())\
+        .limit(5)\
+        .all()
+
+    return jsonify({
+        "logs": [
+            {
+                "id":         log.id,
+                "created_at": log.created_at.isoformat(),
+                "week_label": log.week_label,
+                "summary":    log.summary,
+                "reasoning":  _json.loads(log.reasoning) if log.reasoning else {},
+            }
+            for log in logs
+        ]
     }), 200

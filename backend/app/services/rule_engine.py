@@ -69,8 +69,8 @@ class RuleEngine:
         # Search for sessions on this weekday within a +/- 1 hour window
         historical_sessions = StudySession.query.filter(
             StudySession.user_id == user_id,
-            func.strftime('%w', StudySession.start_time) == RuleEngine._get_day_int(day_of_week),
-            func.cast(func.strftime('%H', StudySession.start_time), db.Integer).between(start_hour - 1, start_hour + 1)
+            func.extract('dow', StudySession.start_time) == int(RuleEngine._get_day_int(day_of_week)),
+            func.cast(func.extract('hour', StudySession.start_time), db.Integer).between(start_hour - 1, start_hour + 1)
         ).all()
 
         # 2. Logic: Cold Start vs. Mature
@@ -133,8 +133,8 @@ class RuleEngine:
         total_sessions = StudySession.query.filter_by(user_id=user_id).count() or 1
         
         # Avg Success Score
-        avg_score = db.session.query(func.avg(StudySession.success_score)).filter_by(user_id=user_id).scalar() or 0.0
-        context['avg_session_efficacy'] = float(avg_score)
+        avg_score = db.session.query(func.avg(StudySession.success_score)).filter_by(user_id=user_id).scalar()
+        context['avg_session_efficacy'] = float(avg_score) if avg_score is not None else 3.0
 
         # Environment Consistency (e.g. % of sessions in "Library")
         # For simplicity, we just check if they have a dominant location

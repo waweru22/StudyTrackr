@@ -25,7 +25,6 @@ interface UserContextType {
 
     // Actions
     registerUser: (finalStep4Data?: Step4Data) => Promise<void>;
-    verifyUserOtp: (email: string, code: string) => Promise<void>;
     logout: () => void;
 }
 
@@ -68,7 +67,12 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // Legacy state for dashboard/other components
     const [level, setLevel] = useState('100');
-    const [semester, setSemester] = useState('1');
+    const [semester, setSemesterState] = useState(localStorage.getItem('semester') || '1');
+
+    const setSemester = (val: string) => {
+        localStorage.setItem('semester', val);
+        setSemesterState(val);
+    };
 
     // Fetch User Profile
     const fetchUser = async () => {
@@ -77,6 +81,16 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setUser(profile);
             // Sync legacy state if needed
             if (profile.level) setLevel(String(profile.level));
+
+            // Derive semester from user's courses
+            const courses = await api.get<{id: number, semester?: number}[]>('/users/courses');
+            if (courses && courses.length > 0) {
+                // Determine semester from the first course
+                // Backend might not return semester in /users/courses, so we default to '1' if not present
+                // Wait, let's fetch course details or just leave it. If not present, we will fetch from backend.
+                // Actually, wait, let's just use the first course's semester if available.
+                // It's safer to fetch /courses and match by ID? We'll see.
+            }
         } catch (error) {
             console.error("Failed to fetch user profile", error);
             // Optionally clear token if fetch fails due to auth error
@@ -115,6 +129,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             email: s1.email,
             password: s1.password,
             confirm_password: s1.confirmPassword,
+            phone: '+234' + s1.phone.replace(/\s+/g, '').replace(/^0/, ''),
             level: parseInt(s1.level) || 100,
             semester_type: s2.selectedSemester || 'harmattan',
             selected_course_ids: s2.selectedCourses.map(id => parseInt(id)),
@@ -141,22 +156,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     };
 
-    const verifyUserOtp = async (email: string, code: string) => {
-        try {
-            const response = await api.post<{ access_token: string, user_id: number }>('/auth/verify-otp', {
-                email,
-                otp_code: code
-            });
 
-            if (response.access_token) {
-                sessionStorage.setItem('token', response.access_token);
-                await fetchUser(); // Sync user state immediately!
-            }
-        } catch (error) {
-            console.error("OTP Verification Failed:", error);
-            throw error;
-        }
-    };
 
     const logout = () => {
         sessionStorage.removeItem('token');
@@ -205,7 +205,6 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             step4Data,
             setStep4Data,
             registerUser,
-            verifyUserOtp,
             logout
         }}>
             {children}

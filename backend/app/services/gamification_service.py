@@ -3,9 +3,14 @@ from app.models.user import User
 
 class GamificationService:
     @staticmethod
-    def award_xp(user_id, net_duration_minutes, distraction_count):
+    def award_xp(user_id, net_duration_minutes, distraction_count=0):
         user = User.query.get(user_id)
         if not user: return 0
+
+        # Accept a StudySession object as the second arg (seed script compat)
+        if hasattr(net_duration_minutes, 'duration_minutes'):
+            session = net_duration_minutes
+            net_duration_minutes = session.duration_minutes or 0
         
         # Base XP: 90m = 100 XP (Calculated from Net Duration)
         base_xp = (net_duration_minutes / 90.0) * 100.0

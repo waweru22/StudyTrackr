@@ -13,7 +13,8 @@ import Materials from './pages/Materials';
 import Notes from './pages/Notes';
 import Help from './pages/Help';
 import Login from './pages/Login';
-import VerifyOTP from './pages/VerifyOTP';
+import CheckEmail from './pages/VerifyOTP';
+import VerifyEmail from './pages/VerifyEmail';
 import SessionTimer from './pages/SessionTimer';
 import { UserProvider } from './context/UserContext';
 import NotificationsPage from './pages/NotificationsPage';
@@ -41,7 +42,8 @@ function App() {
           <Route path="/onboarding/step-2" element={<OnboardingStep2 />} />
           <Route path="/onboarding/step-3" element={<OnboardingStep3 />} />
           <Route path="/onboarding/step-4" element={<OnboardingStep4 />} />
-          <Route path="/verify-otp" element={<VerifyOTP />} />
+          <Route path="/check-email" element={<CheckEmail />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/help" element={<Help />} />
 
           {/* Admin Public Route */}

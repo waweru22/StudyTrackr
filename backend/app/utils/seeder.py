@@ -1,9 +1,33 @@
+import sys
+import io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+
+"""
+StudyTrackr Master Seeder - PostgreSQL-safe
+=============================================
+Seeds ALL reference data the app needs to function:
+  1. Courses (full Nile University SE curriculum)
+  2. Knowledge base rules (expert system)
+  3. Notification triggers
+  4. Demo users: Ernest & Ameer
+
+Safe to run multiple times (idempotent).
+Run from backend/:  python -m app.utils.seeder
+"""
+
 from app import create_app, db
-from app.models.course import Course, StudyKnowledge
+from werkzeug.security import generate_password_hash
 
 app = create_app()
 
+
+# =======================================================================
+#  1. COURSES
+# =======================================================================
+
 def seed_courses():
+    from app.models.course import Course
+
     courses = [
         # --- Weight 5: Critical Engineering & Logic ---
         {"code":"PHY101", "name":"General Physics I", "weight":5, "level":100, "semester":1, "credits":2},
@@ -66,16 +90,26 @@ def seed_courses():
         {"code":"PHY108", "name":"General Practical Physics II", "weight":1, "level":100, "semester":2, "credits":1},
         {"code":"GST105", "name":"IT and Library Skills", "weight":1, "level":100, "semester":2, "credits":2},
         {"code":"NUN-COS204", "name":"Digital Media Communication", "weight":1, "level":200, "semester":2, "credits":2},
-        {"code":"NUN-COS305", "name":"Remote Work and Collaboration", "weight":1, "level":300, "semester":1, "credits":2}
+        {"code":"NUN-COS305", "name":"Remote Work and Collaboration", "weight":1, "level":300, "semester":1, "credits":2},
     ]
 
+    added = 0
     for c_data in courses:
         if not Course.query.filter_by(code=c_data['code']).first():
             db.session.add(Course(**c_data))
-            print(f"Added Course: {c_data['code']}")
+            added += 1
+
+    db.session.commit()
+    print(f"  [OK] Courses: {added} added, {Course.query.count()} total")
 
 
-    # --- Seed Knowledge Base for Inference (Expert System Rules) ---
+# =======================================================================
+#  2. KNOWLEDGE BASE (Expert System Rules)
+# =======================================================================
+
+def seed_knowledge():
+    from app.models.course import StudyKnowledge
+
     tips = [
       {
         "principle": "Recall-Gated Consolidation",
@@ -206,27 +240,208 @@ def seed_courses():
         "tags": "Deep Work, Template",
         "rule_type": "schedule",
         "student_instruction": "This is an extended deep work block. Before you start, close every notification, put your phone in another room, and commit to zero interruptions for the full duration. The first 15 minutes may feel slow \u2014 push through it."
-      }
+      },
     ]
-    
+
+    added, updated = 0, 0
     for t_data in tips:
         existing = StudyKnowledge.query.filter_by(principle=t_data['principle']).first()
         if existing:
-            existing.rule_type = t_data.get('rule_type', 'schedule')
-            existing.student_instruction = t_data.get('student_instruction')
-            existing.content = t_data['content']
-            existing.inference_trigger = t_data['inference_trigger']
-            existing.rule_logic = t_data['rule_logic']
-            existing.academic_source = t_data['academic_source']
-            existing.tags = t_data['tags']
-            print(f"Updated Knowledge: {t_data['principle']}")
+            for key, val in t_data.items():
+                setattr(existing, key, val)
+            updated += 1
         else:
             db.session.add(StudyKnowledge(**t_data))
-            print(f"Added Knowledge: {t_data['principle']}")
+            added += 1
 
     db.session.commit()
-    print("Seeding Complete: Curriculum & Expert System Rules loaded.")
+    print(f"  [OK] Knowledge rules: {added} added, {updated} updated, {StudyKnowledge.query.count()} total")
+
+
+# =======================================================================
+#  3. NOTIFICATION TRIGGERS
+# =======================================================================
+
+def seed_notification_triggers():
+    from app.models.notification_trigger import NotificationTrigger
+
+    triggers = [
+        {"trigger_name": "badge_earned", "description": "User earned a new badge by crossing an XP threshold", "is_active": True, "priority": "medium", "notification_type": "achievement", "send_push": True, "template_title": "Badge Earned! {badge_name}", "template_message": "You've reached {xp} XP and unlocked the {badge_name} badge. Great work!"},
+        {"trigger_name": "burnout_warning", "description": "Detected 2+ low energy sessions in the last 3 sessions", "is_active": True, "priority": "urgent", "notification_type": "warning", "send_push": True, "template_title": "Burnout Detected", "template_message": "We noticed you've had low energy in recent sessions. Let's reduce your workload and take a break."},
+        {"trigger_name": "streak_milestone", "description": "Streak reached 7, 14, 30, or 60 days", "is_active": True, "priority": "low", "notification_type": "achievement", "send_push": True, "template_title": "{streak}-Day Streak!", "template_message": "Amazing consistency! You've completed sessions for {streak} consecutive days."},
+        {"trigger_name": "low_efficacy_session", "description": "Session completed with success_score < 2", "is_active": True, "priority": "low", "notification_type": "tip", "send_push": True, "template_title": "Session Didn't Go Well", "template_message": "That {course_name} session didn't feel productive (scored {score}/5). Try a different technique next time."},
+        {"trigger_name": "missed_session", "description": "Scheduled block was not completed on time", "is_active": True, "priority": "medium", "notification_type": "warning", "send_push": True, "template_title": "You Missed a Session", "template_message": "You missed {course_name} at {time}. No worries - let's get back on track."},
+        {"trigger_name": "course_struggling", "description": "Student consistently performing poorly in a course", "is_active": False, "priority": "low", "notification_type": "tip", "send_push": False, "template_title": "Struggling with {course_name}?", "template_message": "Your recent {course_name} sessions show low scores. Consider reviewing materials or trying a different study technique."},
+        {"trigger_name": "peak_time_reminder", "description": "Reminder to study during identified peak productivity hours", "is_active": False, "priority": "low", "notification_type": "tip", "send_push": False, "template_title": "Peak Study Time", "template_message": "Your most productive study time is {peak_time}. Consider scheduling a session now."},
+        {"trigger_name": "weekly_insights", "description": "Weekly summary of study performance and progress", "is_active": False, "priority": "low", "notification_type": "insight", "send_push": False, "template_title": "Your Weekly Study Insights", "template_message": "This week: {sessions_completed} sessions, {total_minutes} minutes studied, {avg_score} avg score."},
+        {"trigger_name": "schedule_adapted", "description": "Schedule was automatically adjusted by the inference engine", "is_active": False, "priority": "medium", "notification_type": "insight", "send_push": False, "template_title": "Schedule Updated", "template_message": "Your study schedule has been adapted based on recent performance. Check your new blocks."},
+        {"trigger_name": "long_gap_alert", "description": "Student has not studied for an extended period", "is_active": False, "priority": "low", "notification_type": "tip", "send_push": False, "template_title": "It's Been a While", "template_message": "You haven't had a study session in {days} days. A short session can help you get back on track."},
+    ]
+
+    added = 0
+    for t_data in triggers:
+        if not NotificationTrigger.query.filter_by(trigger_name=t_data['trigger_name']).first():
+            db.session.add(NotificationTrigger(**t_data))
+            added += 1
+
+    db.session.commit()
+    print(f"  [OK] Notification triggers: {added} added, {NotificationTrigger.query.count()} total")
+
+
+# =======================================================================
+#  4. DEMO USERS - Ernest & Ameer
+# =======================================================================
+
+DEMO_PASSWORD = "1234567"
+
+def seed_demo_users():
+    from app.models.user import User
+    from app.models.course import Course
+
+    # --- Ernest ---
+    ernest_email = "20221192@nileuniversity.edu.ng"
+    ernest = User.query.filter_by(email=ernest_email.lower()).first()
+    if not ernest:
+        ernest = User(
+            username="ernestisabookworm_",
+            email=ernest_email,
+            hashed_password=generate_password_hash(DEMO_PASSWORD),
+            level=300,
+            role="student",
+            is_verified=True,
+            base_template="deep_work_specialist",
+            peak_time="morning",
+            focus_threshold=90,
+            learning_style="read_write",
+            preferred_environment_v2="silent",
+            study_mode="solo",
+            daily_cognitive_budget=2,
+            xp_points=0,
+            streak_count=0,
+            badge="Novice",
+        )
+        db.session.add(ernest)
+        db.session.flush()
+
+        ernest_codes = ["SEN306", "CSC308", "SEN304", "SEN322", "GST312"]
+        courses = Course.query.filter(Course.code.in_(ernest_codes)).all()
+        for course in courses:
+            if course not in ernest.courses:
+                ernest.courses.append(course)
+
+        db.session.commit()
+        print(f"  [OK] Ernest created: {ernest_email}")
+    else:
+        print(f"  [SKIP] Ernest already exists: {ernest_email}")
+
+    # --- Ameer ---
+    ameer_email = "20220088@nileuniversity.edu.ng"
+    ameer = User.query.filter_by(email=ameer_email.lower()).first()
+    if not ameer:
+        ameer = User(
+            username="ameerreadsalot_",
+            email=ameer_email,
+            hashed_password=generate_password_hash(DEMO_PASSWORD),
+            level=200,
+            role="student",
+            is_verified=True,
+            base_template="balanced_sprinter",
+            peak_time="morning",
+            focus_threshold=25,
+            learning_style="visual",
+            preferred_environment_v2="silent",
+            study_mode="solo",
+            daily_cognitive_budget=3,
+            xp_points=0,
+            streak_count=0,
+            badge="Novice",
+        )
+        db.session.add(ameer)
+        db.session.flush()
+
+        ameer_codes = ["MTH202", "IFT212", "COS202", "GST212", "ENT212"]
+        courses = Course.query.filter(Course.code.in_(ameer_codes)).all()
+        for course in courses:
+            if course not in ameer.courses:
+                ameer.courses.append(course)
+
+        db.session.commit()
+        print(f"  [OK] Ameer created: {ameer_email}")
+    else:
+        print(f"  [SKIP] Ameer already exists: {ameer_email}")
+
+
+# =======================================================================
+#  5. VERIFICATION
+# =======================================================================
+
+def verify_seed():
+    from app.models.course import Course, StudyKnowledge
+    from app.models.user import User
+    from app.models.notification_trigger import NotificationTrigger
+
+    print("\n--- Seed Verification ---")
+    print(f"Courses:              {Course.query.count()}")
+    print(f"Knowledge base rules: {StudyKnowledge.query.count()}")
+    print(f"Notification triggers:{NotificationTrigger.query.count()}")
+    print(f"Users:                {User.query.count()}")
+
+    ernest = User.query.filter_by(email='20221192@nileuniversity.edu.ng').first()
+    ameer = User.query.filter_by(email='20220088@nileuniversity.edu.ng').first()
+
+    print(f"Ernest exists:        {'[OK]' if ernest else '[FAIL] MISSING'}")
+    print(f"Ameer exists:         {'[OK]' if ameer else '[FAIL] MISSING'}")
+
+    if ernest:
+        print(f"Ernest courses:       {len(ernest.courses)}")
+    if ameer:
+        print(f"Ameer courses:        {len(ameer.courses)}")
+    print("--- End Verification ---\n")
+
+
+# =======================================================================
+#  MAIN
+# =======================================================================
+
+def run_seeder():
+    print("\n========================================")
+    print("|   StudyTrackr Master Seeder          |")
+    print("========================================\n")
+
+    # 1. Courses
+    try:
+        seed_courses()
+    except Exception as e:
+        db.session.rollback()
+        print(f"  [FAIL] Courses seeding failed: {e}")
+
+    # 2. Knowledge base rules
+    try:
+        seed_knowledge()
+    except Exception as e:
+        db.session.rollback()
+        print(f"  [FAIL] Knowledge seeding failed: {e}")
+
+    # 3. Notification triggers
+    try:
+        seed_notification_triggers()
+    except Exception as e:
+        db.session.rollback()
+        print(f"  [FAIL] Notification triggers seeding failed: {e}")
+
+    # 4. Demo users
+    try:
+        seed_demo_users()
+    except Exception as e:
+        db.session.rollback()
+        print(f"  [FAIL] Demo user seeding failed: {e}")
+
+    # 5. Verify
+    verify_seed()
+
+    print("Seeding complete.\n")
+
 
 if __name__ == '__main__':
     with app.app_context():
-        seed_courses()
+        run_seeder()

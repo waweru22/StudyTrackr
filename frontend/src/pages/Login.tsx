@@ -13,7 +13,16 @@ const Login: React.FC = () => {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
+    const [emailError, setEmailError] = useState('');
     const [loading, setLoading] = useState(false);
+
+    const STUDENT_EMAIL_PATTERN = /^\d{8,10}@nileuniversity\.edu\.ng$/;
+
+    const isEmailInvalid = () => {
+        // Only validate if identifier looks like an email
+        if (!identifier.includes('@')) return false;
+        return !STUDENT_EMAIL_PATTERN.test(identifier.trim().toLowerCase());
+    };
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -86,11 +95,25 @@ const Login: React.FC = () => {
                         <input
                             type="text"
                             value={identifier}
-                            onChange={(e) => setIdentifier(e.target.value)}
+                            onChange={(e) => {
+                                setIdentifier(e.target.value);
+                                if (emailError) setEmailError('');
+                            }}
+                            onBlur={() => {
+                                if (identifier.includes('@') && !STUDENT_EMAIL_PATTERN.test(identifier.trim().toLowerCase())) {
+                                    setEmailError('Please use your Nile University student email (e.g. 20222208@nileuniversity.edu.ng)');
+                                }
+                            }}
                             required
-                            placeholder="e.g. waweru22 or name@email.com"
-                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400 text-sm transition-shadow shadow-sm"
+                            placeholder="e.g. 20222208@nileuniversity.edu.ng"
+                            className={`w-full px-4 py-3 rounded-lg border ${emailError ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400 text-sm transition-shadow shadow-sm`}
                         />
+                        {emailError && (
+                            <p className="text-red-600 text-sm font-medium mt-1 flex items-center">
+                                <AlertCircle size={14} className="mr-1" />
+                                {emailError}
+                            </p>
+                        )}
                     </div>
 
                     {/* Password */}
@@ -125,8 +148,8 @@ const Login: React.FC = () => {
 
                     <button
                         type="submit"
-                        disabled={loading}
-                        className={`w-full flex items-center justify-center space-x-2 font-semibold py-3.5 rounded-lg shadow-sm transition-all transform active:scale-[0.99] text-sm text-white ${loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-800 hover:bg-blue-900'}`}
+                        disabled={loading || isEmailInvalid()}
+                        className={`w-full flex items-center justify-center space-x-2 font-semibold py-3.5 rounded-lg shadow-sm transition-all transform active:scale-[0.99] text-sm text-white ${loading || isEmailInvalid() ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-800 hover:bg-blue-900'}`}
                     >
                         {loading ? 'Signing in...' : 'Log In'}
                         {!loading && <ArrowRight size={18} />}

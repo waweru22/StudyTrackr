@@ -59,7 +59,7 @@ const OnboardingStep4: React.FC = () => {
                 // For this edit, we assume registerUser can be called after setStep4Data.
                 await registerUser(formData);
                 console.log('Registration complete.');
-                navigate('/verify-otp', { state: { email: step1Data.email } });
+                navigate('/check-email', { state: { email: step1Data.email } });
             } catch (e) {
                 console.error("Registration failed:", e);
                 // Optionally, display an error message to the user

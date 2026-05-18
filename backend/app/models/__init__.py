@@ -9,5 +9,6 @@ from app.models.fcm_token import FCMToken
 from app.models.broadcast import Broadcast
 from app.models.admin_broadcast import AdminBroadcast
 from app.models.pending_registration import PendingRegistration
+from app.models.adaptation_log import AdaptationLog
 
 # Join table for User-Course is now defined in app.models.course as UserCourse class

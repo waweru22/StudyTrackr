@@ -25,6 +25,10 @@ const OnboardingStep2: React.FC = () => {
     const [error, setError] = useState<string>('');
     const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
     const [loading, setLoading] = useState(false);
+    const [allCourses, setAllCourses] = useState<Course[]>([]);
+    const [carryoverError, setCarryoverError] = useState('');
+    const [addedCarryovers, setAddedCarryovers] = useState<Course[]>([]);
+    const [loadingCarryover, setLoadingCarryover] = useState(false);
 
     // Fix: Use step1Data.level (fresh form data) instead of legacy 'level' context
     const userLevel = parseInt(step1Data.level) || parseInt(level) || 100;
@@ -34,10 +38,7 @@ const OnboardingStep2: React.FC = () => {
         const fetchCourses = async () => {
             setLoading(true);
             try {
-                // Map semester string to expected backend int (1 or 2)
                 const semInt = selectedSemester === 'harmattan' ? 1 : 2;
-
-                // Fetch filtered courses
                 const courses = await api.get<Course[]>(`/courses/filter?level=${userLevel}&semester=${semInt}`);
                 setAvailableCourses(courses);
             } catch (err) {
@@ -47,9 +48,75 @@ const OnboardingStep2: React.FC = () => {
                 setLoading(false);
             }
         };
-
         fetchCourses();
     }, [userLevel, selectedSemester]);
+
+    // Fetch ALL courses from all levels for carryover validation
+    useEffect(() => {
+        const fetchAll = async () => {
+            setLoadingCarryover(true);
+            try {
+                const semInt = selectedSemester === 'harmattan' ? 1 : 2;
+                const levels = [100, 200, 300, 400, 500];
+                const results = await Promise.all(
+                    levels.map(lvl =>
+                        api.get<Course[]>(`/courses/filter?level=${lvl}&semester=${semInt}`)
+                            .catch(() => [] as Course[])
+                    )
+                );
+                const map = new Map<number, Course>();
+                results.flat().forEach(c => map.set(c.id, c));
+                setAllCourses(Array.from(map.values()));
+            } catch { /* silent */ } finally {
+                setLoadingCarryover(false);
+            }
+        };
+        fetchAll();
+    }, [selectedSemester]);
+
+    const normalise = (str: string) => str.trim().toLowerCase().replace(/\s+/g, '');
+
+    const handleAddCarryover = () => {
+        const input = normalise(additionalCourse);
+        if (!input) return;
+        setCarryoverError('');
+
+        if (loadingCarryover) {
+            setCarryoverError('Still loading course list. Please wait a moment.');
+            return;
+        }
+
+        // Match by code OR name, case-insensitive, spaces ignored
+        const match = allCourses.find(
+            c => normalise(c.code) === input || normalise(c.name) === input
+        );
+
+        if (!match) {
+            setCarryoverError(
+                'Course not found. Enter a valid course code (e.g. SEN306) or full course name.'
+            );
+            return;
+        }
+
+        // Duplicate check by ID
+        const alreadyAdded = selectedCourses.includes(String(match.id));
+        if (alreadyAdded) {
+            setCarryoverError('You have already added this course.');
+            return;
+        }
+
+        // Course limit
+        if (selectedCourses.length >= 12) {
+            setCarryoverError('Maximum 12 courses allowed.');
+            return;
+        }
+
+        setAddedCarryovers(prev => [...prev, match]);
+        setSelectedCourses(prev => [...prev, String(match.id)]);
+        setAdditionalCourse('');
+        setCarryoverError('');
+        if (error) setError('');
+    };
 
     // Effect: Clear selections when Semester changes (Mutual Exclusivity)
     // Only if the selections don't match the new semester (handled by user action, but let's reinforce)
@@ -209,17 +276,39 @@ const OnboardingStep2: React.FC = () => {
                             <input
                                 type="text"
                                 value={additionalCourse}
-                                onChange={(e) => setAdditionalCourse(e.target.value)}
-                                placeholder="e.g. GNS101"
-                                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                onChange={(e) => { setAdditionalCourse(e.target.value); setCarryoverError(''); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCarryover(); } }}
+                                placeholder={loadingCarryover ? 'Loading courses…' : 'e.g. GNS101 or General Studies'}
+                                disabled={loadingCarryover}
+                                className={`w-full px-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm ${carryoverError ? 'border-red-400' : 'border-gray-300'} ${loadingCarryover ? 'bg-gray-50 text-gray-400' : ''}`}
                             />
                         </div>
-                        <button className="text-blue-800 hover:text-blue-900 transition-colors">
+                        <button
+                            onClick={handleAddCarryover}
+                            disabled={loadingCarryover}
+                            className={`transition-colors ${loadingCarryover ? 'opacity-40 cursor-not-allowed' : ''}`}
+                        >
                             <div className="w-8 h-8 rounded-full bg-blue-800 text-white flex items-center justify-center hover:bg-blue-900">
                                 <Plus size={16} strokeWidth={3} />
                             </div>
                         </button>
                     </div>
+                    {carryoverError && (
+                        <p className="text-xs text-red-500 mt-2 flex items-center"><AlertCircle size={12} className="mr-1" />{carryoverError}</p>
+                    )}
+                    {addedCarryovers.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-3">
+                            {addedCarryovers.map(c => (
+                                <span key={c.id} className="inline-flex items-center bg-blue-50 text-blue-800 text-xs font-semibold px-3 py-1.5 rounded-full border border-blue-100">
+                                    {c.code} — {c.name}
+                                    <button onClick={() => {
+                                        setAddedCarryovers(prev => prev.filter(x => x.id !== c.id));
+                                        setSelectedCourses(prev => prev.filter(id => id !== String(c.id)));
+                                    }} className="ml-2 text-blue-400 hover:text-red-500"><Minus size={12} /></button>
+                                </span>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 <div className="space-y-4 pt-4">

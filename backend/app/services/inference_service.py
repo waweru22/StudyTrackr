@@ -52,7 +52,7 @@ def get_alternate_technique(course_weight, template_key):
 
 class InferenceService:
     @staticmethod
-    def generate_week_schedule(user_id, selected_course_ids=None):
+    def generate_week_schedule(user_id, selected_course_ids=None, week_start_override=None):
         from app.models.user import User
         LAGOS_TZ = timezone(timedelta(hours=1))
 
@@ -88,8 +88,21 @@ class InferenceService:
         base_peak = peak_hour_map.get(peak_time_str, 9)
 
         # Daily cognitive budget (cap 1–3)
-        daily_budget = user.daily_cognitive_budget or 3
-        daily_budget = max(1, min(3, daily_budget))
+        if user.daily_cognitive_budget:
+            daily_budget = user.daily_cognitive_budget
+        else:
+            # daily_cognitive_budget is not set during onboarding, so derive from template.
+            # Deep Work sessions are 90min — 2 blocks per day is the right load.
+            # Pomodoro sessions are 25-50min — 3 blocks is manageable.
+            # Active Recall is cognitively demanding — 2 blocks.
+            template_budget_defaults = {
+                'deep_work':     2,
+                'active_recall': 2,
+                'pomodoro':      3,
+            }
+            daily_budget = template_budget_defaults.get(template_key, 2)
+
+        daily_budget = max(1, min(3, int(daily_budget)))
 
         # ── SUGGESTED STUDY CONDITIONS (Problem 4) ───────────────────
         env_map = {
@@ -145,7 +158,10 @@ class InferenceService:
 
         # ── 5. CALENDAR ALIGNMENT — start from Monday ────────────────
         today = datetime.now(LAGOS_TZ).date()
-        start_of_week = today - timedelta(days=today.weekday())
+        if week_start_override:
+            start_of_week = week_start_override
+        else:
+            start_of_week = today - timedelta(days=today.weekday())
 
         for i in range(7):
             current_day = start_of_week + timedelta(days=i)
@@ -264,14 +280,9 @@ class InferenceService:
                 if matched_rules and not is_sunday and not is_peak_slot:
                     for rule in matched_rules:
                         p_lower = rule.principle.lower()
-                        # Skip template enforcement rules that conflict
-                        if 'template enforcement' in p_lower:
-                            if template_key == 'pomodoro' and 'deep work' in p_lower:
-                                continue
-                            if template_key == 'deep_work' and 'pomodoro' in p_lower:
-                                continue
-                            if template_key == 'active_recall' and ('deep work' in p_lower or 'pomodoro' in p_lower):
-                                continue
+                        # Never let internal scheduling constraint rules surface as technique names
+                        if 'template enforcement' in p_lower or 'template block sizing' in p_lower:
+                            continue
                         tech_name = rule.principle
                         tech_details = rule.content
 
@@ -310,7 +321,7 @@ class InferenceService:
                 )
 
             # ─── End-of-day: check efficacy for next day swap ────────
-            apply_review_swap = avg_efficacy < 0.5
+            apply_review_swap = avg_efficacy is not None and avg_efficacy < 2.5
 
         db.session.commit()
         return "Adaptive Schedule Generated"
