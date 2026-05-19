@@ -46,7 +46,7 @@ Examples:
 """
         response = self.client.models.generate_content(
             # model='gemini-2.5-flash-lite',
-            model='gemini-2.5-flash',
+            model='gemini-2.0-flash',
             contents=prompt,
             config=types.GenerateContentConfig(temperature=0),
         )
@@ -79,7 +79,7 @@ Prioritize resources that show full content immediately without login — tutori
 Do not include resources that require registration or payment."""
 
             response = self.client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-2.0-flash',
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     tools=[types.Tool(google_search=types.GoogleSearch())],

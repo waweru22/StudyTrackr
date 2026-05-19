@@ -71,8 +71,8 @@ const OnboardingStep3: React.FC = () => {
             <main className="w-full max-w-5xl px-6 py-8 flex-grow flex flex-col items-center">
                 <div className="space-y-2 mb-10 w-full max-w-3xl">
                     <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">3 of 4</p>
-                    <h2 className="text-2xl font-bold font-dm-sans text-gray-900">Choose Your Blueprint</h2>
-                    <p className="text-gray-500 text-base font-light font-dm-sans max-w-2xl">
+                    <h2 className="text-xl font-bold font-dm-sans text-gray-900">Choose Your Blueprint</h2>
+                    <p className="text-gray-500 text-sm font-light font-dm-sans max-w-2xl">
                         Pick a starting template based on world-class study techniques. These provide the initial rules for our AI, which will refine and personalize them as you log your sessions.
                     </p>
                 </div>
@@ -90,7 +90,7 @@ const OnboardingStep3: React.FC = () => {
                                 <div className="h-40 w-full flex items-end justify-center mb-6">
                                     <img src={blueprint.image} alt={blueprint.title} className="max-h-full w-auto object-contain" />
                                 </div>
-                                <h3 className="text-base font-medium font-dm-sans text-gray-900 mb-1">{blueprint.title}</h3>
+                                <h3 className="text-sm font-medium font-dm-sans text-gray-900 mb-1">{blueprint.title}</h3>
                                 <p className="text-xs font-medium font-dm-sans text-blue-600 mb-1">{blueprint.techniques}</p>
                                 <p className="text-xs font-light font-dm-sans text-gray-500 leading-relaxed text-left">
                                     {blueprint.description}

@@ -183,14 +183,14 @@ const OnboardingStep2: React.FC = () => {
             <main className="w-full max-w-3xl px-6 py-8 flex-grow">
                 <div className="space-y-0 mb-6">
                     <p className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-2">2 of 4</p>
-                    <h2 className="text-2xl font-bold font-dm-sans text-gray-900 mb-2">Define Your Semester</h2>
-                    <p className="text-gray-500 text-base font-light font-dm-sans mb-4">
+                    <h2 className="text-xl font-bold font-dm-sans text-gray-900 mb-2">Define Your Semester</h2>
+                    <p className="text-gray-500 text-sm font-light font-dm-sans mb-4">
                         Select your core courses. You can select between 5 and 12 courses.
                     </p>
                 </div>
 
                 {/* Semester Selection (Radio) */}
-                <div className="flex items-center space-x-8 mb-6 text-base font-light font-dm-sans text-gray-700 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <div className="flex items-center space-x-8 mb-6 text-sm font-light font-dm-sans text-gray-700 bg-gray-50 p-4 rounded-xl border border-gray-100">
                     <label className="flex items-center space-x-3 cursor-pointer group">
                         <input
                             type="radio"
@@ -238,8 +238,8 @@ const OnboardingStep2: React.FC = () => {
                             return (
                                 <div key={course.id} className={`grid grid-cols-12 gap-4 items-center py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors rounded-lg px-2 ${isSelected ? 'bg-blue-50/50' : ''}`}>
                                     <div className="col-span-1 text-gray-400 text-sm">{index + 1}</div>
-                                    <div className="col-span-2 text-base font-medium font-dm-sans text-gray-700">{course.code}</div>
-                                    <div className="col-span-6 text-base font-light font-dm-sans text-gray-500">{course.name}</div>
+                                    <div className="col-span-2 text-sm font-medium font-dm-sans text-gray-700">{course.code}</div>
+                                    <div className="col-span-6 text-sm font-light font-dm-sans text-gray-500">{course.name}</div>
                                     <div className="col-span-2 text-base text-gray-400 text-right">
                                         <span className="font-medium font-dm-sans text-gray-700">{course.credits}</span> Unit{course.credits !== 1 && 's'}
                                     </div>
@@ -267,11 +267,11 @@ const OnboardingStep2: React.FC = () => {
 
                 {/* Missing Something Section */}
                 <div className="mb-6 pt-6 border-t-2 border-gray-100">
-                    <h3 className="text-base font-medium font-dm-sans text-gray-900 mb-2">Missing something?</h3>
-                    <p className="text-base font-light font-dm-sans text-gray-500 mb-4">If you have carryovers or electives, add them manually here.</p>
+                    <h3 className="text-sm font-medium font-dm-sans text-gray-900 mb-2">Missing something?</h3>
+                    <p className="text-sm font-light font-dm-sans text-gray-500 mb-4">If you have carryovers or electives, add them manually here.</p>
 
                     <div className="flex items-center space-x-3">
-                        <span className="text-base font-medium font-dm-sans text-gray-600 w-auto shrink-0 mr-4">Add Course:</span>
+                        <span className="text-sm font-medium font-dm-sans text-gray-600 w-auto shrink-0 mr-4">Add Course:</span>
                         <div className="flex-grow relative">
                             <input
                                 type="text"

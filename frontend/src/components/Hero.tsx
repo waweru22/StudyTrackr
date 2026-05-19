@@ -6,20 +6,20 @@ const Hero: React.FC = () => {
     const navigate = useNavigate();
 
     return (
-        <section className="max-w-7xl mx-auto px-8 py-16 md:py-24 grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+        <section className="max-w-7xl mx-auto px-8 py-16 grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
             {/* Left Content */}
             <div className="space-y-8 max-w-lg">
-                <h1 className="text-[72px] font-bold font-josefin text-gray-900 leading-[1.1]">
+                <h1 className="text-2xl md:text-3xl lg:text-6xl font-bold font-josefin text-gray-900 leading-[1.1]">
                     Study Smarter. <br />
                     By Design
                 </h1>
-                <p className="text-xl font-light font-dm-sans text-gray-500 leading-relaxed">
+                <p className="text-base md:text-md font-light font-dm-sans text-gray-500 leading-relaxed max-w-2xl">
                     The intelligent study planner that adapts to you. Tell us
                     how you work, and we'll handle the "when" and "where."
                 </p>
                 <button
                     onClick={() => navigate('/onboarding')}
-                    className="px-8 py-3 bg-blue-800 text-white text-base font-medium font-dm-sans rounded-lg shadow-md hover:bg-blue-900 transition-transform transform hover:-translate-y-0.5"
+                    className="px-6 py-3 bg-blue-800 text-white text-base font-medium font-dm-sans rounded-lg shadow-md hover:bg-blue-900 transition-transform transform hover:-translate-y-0.5"
                 >
                     Get Started
                 </button>
@@ -37,7 +37,7 @@ const Hero: React.FC = () => {
                     <img
                         src={heroImage}
                         alt="Study planning illustration"
-                        className="relative z-10 w-full h-auto drop-shadow-xl"
+                        className="relative z-10 w-full h-auto max-h-80 md:max-h-96 object-contain drop-shadow-xl"
                     />
                 </div>
             </div>

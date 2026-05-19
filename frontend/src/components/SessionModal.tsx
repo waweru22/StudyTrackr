@@ -151,18 +151,20 @@ const SessionModal: React.FC<SessionModalProps> = ({ isOpen, onClose, session })
                             <h3 className="text-sm font-bold text-red-900 mb-2">Pomodoro Cycles</h3>
                             <div className="flex items-center justify-between">
                                 <div className="text-xs text-red-700">
-                                    <p>1 Cycle = 25m Focus + 5m Break</p>
-                                    <p className="font-bold mt-1">Total Duration: {pomoLoops * 30} Minutes</p>
+                                    <p>{pomoLoops} &times; 25 min work + 5 min break</p>
+                                    <p className="font-bold mt-1">Total: {pomoLoops * 30} minutes ({pomoLoops === 2 ? '1 hour' : pomoLoops === 3 ? '1 hr 30 min' : '2 hours'})</p>
                                 </div>
                                 <div className="flex items-center space-x-3 bg-white px-3 py-1.5 rounded-lg border border-red-100 shadow-sm">
                                     <button
-                                        onClick={() => setPomoLoops(Math.max(1, pomoLoops - 1))}
-                                        className="text-red-600 font-bold hover:bg-red-50 w-6 h-6 rounded flex items-center justify-center"
+                                        onClick={() => setPomoLoops(Math.max(2, pomoLoops - 1))}
+                                        disabled={pomoLoops <= 2}
+                                        className={`font-bold w-6 h-6 rounded flex items-center justify-center ${pomoLoops <= 2 ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:bg-red-50'}`}
                                     >-</button>
                                     <span className="text-red-900 font-mono font-bold">{pomoLoops}</span>
                                     <button
-                                        onClick={() => setPomoLoops(Math.min(10, pomoLoops + 1))}
-                                        className="text-red-600 font-bold hover:bg-red-50 w-6 h-6 rounded flex items-center justify-center"
+                                        onClick={() => setPomoLoops(Math.min(4, pomoLoops + 1))}
+                                        disabled={pomoLoops >= 4}
+                                        className={`font-bold w-6 h-6 rounded flex items-center justify-center ${pomoLoops >= 4 ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:bg-red-50'}`}
                                     >+</button>
                                 </div>
                             </div>

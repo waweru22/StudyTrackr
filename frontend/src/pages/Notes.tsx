@@ -5,7 +5,7 @@ import MiniTimer from '../components/MiniTimer';
 import { api, BASE_URL } from '../api/client';
 import { useUser } from '../context/UserContext';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Plus, Upload, FileText, X, Save, File, Trash2, ChevronLeft, Eye } from 'lucide-react';
+import { Plus, Upload, FileText, X, Save, File, Trash2, ChevronLeft, Eye, RefreshCw } from 'lucide-react';
 
 // --- Types ---
 interface Note {
@@ -14,6 +14,7 @@ interface Note {
     content: string;
     file_path?: string;
     file_type?: string;
+    annotation?: string;
     last_edited: string;
     created_at?: string;
     course_id?: number;
@@ -240,6 +241,7 @@ const ViewerOverlay = styled.div`
     backdrop-filter: blur(6px);
     display: flex; flex-direction: column;
     z-index: 60;
+    overflow: hidden;
 `;
 
 const ViewerHeader = styled.div`
@@ -276,6 +278,8 @@ const ViewerCloseButton = styled.button`
 
 const ViewerBody = styled.div`
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
     padding: 0;
 `;
 
@@ -323,6 +327,16 @@ const Notes: React.FC = () => {
     const [uploading, setUploading] = useState(false);
     const [viewingFile, setViewingFile] = useState<Note | null>(null);
 
+    // Annotation State
+    const [annotation, setAnnotation] = useState('');
+    const [initialAnnotation, setInitialAnnotation] = useState('');
+    const [annotationSaveStatus, setAnnotationSaveStatus] = useState('');
+
+    // Replace Document State
+    const [showReplaceUpload, setShowReplaceUpload] = useState(false);
+    const [replaceFile, setReplaceFile] = useState<File | null>(null);
+    const [replacing, setReplacing] = useState(false);
+
     // Fetch Notes — same fetch regardless of entry path (sidebar or timer)
     const fetchNotes = async () => {
         setLoading(true);
@@ -350,6 +364,11 @@ const Notes: React.FC = () => {
     const handleEdit = (note: Note) => {
         if (note.file_path) {
             setViewingFile(note);
+            setAnnotation(note.annotation || '');
+            setInitialAnnotation(note.annotation || '');
+            setAnnotationSaveStatus('');
+            setShowReplaceUpload(false);
+            setReplaceFile(null);
             return;
         }
         setCurrentNote(note);
@@ -425,7 +444,7 @@ const Notes: React.FC = () => {
             fetchNotes(); // Refresh list
         } catch (err) {
             console.error("Upload failed", err);
-            alert("Upload failed. Only PDF, PPTX, and DOCX supported.");
+            alert("Upload failed. Supported formats: PDF, DOCX, DOC, TXT, MD.");
         } finally {
             setUploading(false);
         }
@@ -434,6 +453,53 @@ const Notes: React.FC = () => {
     const formatDate = (dateStr?: string) => {
         if (!dateStr) return 'Unknown date';
         return new Date(dateStr).toLocaleString(); // "Date and time" as requested
+    };
+
+    // Auto-save annotation 2 seconds after typing stops
+    useEffect(() => {
+        if (!viewingFile || annotation === initialAnnotation) return;
+        const timer = setTimeout(() => {
+            saveAnnotation(annotation);
+        }, 2000);
+        return () => clearTimeout(timer);
+    }, [annotation]);
+
+    const saveAnnotation = async (text: string) => {
+        if (!viewingFile) return;
+        setAnnotationSaveStatus('Saving...');
+        try {
+            await api.put(`/notes/${viewingFile.id}`, { annotation: text });
+            setInitialAnnotation(text);
+            // Also update the note in the local list so closing and reopening shows the latest
+            setNotes(prev => prev.map(n => n.id === viewingFile.id ? { ...n, annotation: text } : n));
+            setAnnotationSaveStatus('Saved');
+            setTimeout(() => setAnnotationSaveStatus(''), 2000);
+        } catch (err) {
+            console.error('Failed to save annotation', err);
+            setAnnotationSaveStatus('Failed to save');
+        }
+    };
+
+    const handleReplaceFile = async () => {
+        if (!replaceFile || !viewingFile) return;
+        setReplacing(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', replaceFile);
+            const res = await api.put(`/notes/${viewingFile.id}/replace-file`, formData);
+            const data = res as any;
+            // Update local state with new file path
+            const updatedNote = { ...viewingFile, file_path: data.file_path, file_type: data.file_type };
+            setViewingFile(updatedNote);
+            setNotes(prev => prev.map(n => n.id === viewingFile.id ? { ...n, file_path: data.file_path, file_type: data.file_type } : n));
+            setShowReplaceUpload(false);
+            setReplaceFile(null);
+        } catch (err) {
+            console.error('Failed to replace file', err);
+            alert('Failed to replace file. Please try again.');
+        } finally {
+            setReplacing(false);
+        }
     };
 
     return (
@@ -535,7 +601,7 @@ const Notes: React.FC = () => {
                                             </NoteInfo>
                                         </NoteHeader>
                                         <p className="text-sm text-gray-500 mt-2 line-clamp-3">
-                                            {note.file_path ? `PDF Document` : note.content}
+                                            {note.file_path ? `${(note.file_type || 'pdf').toUpperCase()} Document` : note.content}
                                         </p>
                                     </div>
                                     <NoteMeta>
@@ -594,11 +660,11 @@ const Notes: React.FC = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">File (PDF / PPTX / DOCX)</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">File (PDF / DOCX / DOC / TXT / MD)</label>
                                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition-colors cursor-pointer relative">
                                     <input
                                         type="file"
-                                        accept=".pdf,.ppt,.pptx,.docx"
+                                        accept=".pdf,.docx,.doc,.txt,.md"
                                         className="absolute inset-0 opacity-0 cursor-pointer"
                                         onChange={e => setUploadFile(e.target.files?.[0] || null)}
                                     />
@@ -629,25 +695,92 @@ const Notes: React.FC = () => {
                 </ModalOverlay>
             )}
 
-            {/* PDF Viewer Modal */}
+            {/* Document Viewer Modal with Annotation */}
             {viewingFile && viewingFile.file_path && (
                 <ViewerOverlay>
                     <ViewerHeader>
                         <ViewerTitle>{viewingFile.title}</ViewerTitle>
-                        <ViewerCloseButton onClick={() => setViewingFile(null)}>
-                            <X size={16} />
-                            Close
-                        </ViewerCloseButton>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setShowReplaceUpload(!showReplaceUpload)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-gray-300 border border-gray-600 hover:bg-white/10 transition-colors"
+                            >
+                                <RefreshCw size={12} />
+                                Replace document
+                            </button>
+                            <ViewerCloseButton onClick={() => setViewingFile(null)}>
+                                <X size={16} />
+                                Close
+                            </ViewerCloseButton>
+                        </div>
                     </ViewerHeader>
-                    <ViewerBody>
-                        <iframe
-                            src={`${BASE_URL}/notes/file/${viewingFile.file_path}`}
-                            width="100%"
-                            height="100%"
-                            style={{ border: 'none', display: 'block', minHeight: 'calc(100vh - 56px)' }}
-                            title={viewingFile.title}
-                        />
-                    </ViewerBody>
+
+                    {/* Replace file upload strip */}
+                    {showReplaceUpload && (
+                        <div className="bg-gray-800 border-b border-gray-700 px-6 py-3 flex items-center gap-4">
+                            <span className="text-xs text-gray-400 shrink-0">Select new file:</span>
+                            <label className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 rounded-md text-xs text-gray-200 cursor-pointer hover:bg-gray-600 transition-colors">
+                                <Upload size={12} />
+                                {replaceFile ? replaceFile.name : 'Choose file'}
+                                <input
+                                    type="file"
+                                    accept=".pdf,.docx,.doc,.txt,.md"
+                                    className="hidden"
+                                    onChange={e => setReplaceFile(e.target.files?.[0] || null)}
+                                />
+                            </label>
+                            {replaceFile && (
+                                <button
+                                    onClick={handleReplaceFile}
+                                    disabled={replacing}
+                                    className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                >
+                                    {replacing ? 'Replacing...' : 'Upload'}
+                                </button>
+                            )}
+                            <button
+                                onClick={() => { setShowReplaceUpload(false); setReplaceFile(null); }}
+                                className="text-gray-500 hover:text-gray-300 ml-auto"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Main content: iframe + annotation panel */}
+                    <div className="flex flex-1 overflow-hidden">
+                        {/* Document viewer */}
+                        <ViewerBody className="flex-1">
+                            <iframe
+                                src={`${BASE_URL}/notes/file/${viewingFile.file_path}`}
+                                width="100%"
+                                height="100%"
+                                style={{ border: 'none', display: 'block', height: '100%' }}
+                                title={viewingFile.title}
+                            />
+                        </ViewerBody>
+
+                        {/* Annotation panel */}
+                        <div className="w-80 bg-white border-l border-gray-200 flex flex-col shrink-0 overflow-hidden">
+                            <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                                <h3 className="text-sm font-semibold text-gray-700">Your Notes</h3>
+                                <p className="text-xs text-gray-400 mt-0.5">Add thoughts, key points, or annotations</p>
+                            </div>
+                            <textarea
+                                value={annotation}
+                                onChange={e => setAnnotation(e.target.value)}
+                                placeholder="Add your notes, thoughts, or key points from this document..."
+                                className="flex-1 w-full p-4 text-sm text-gray-700 resize-none outline-none font-sans leading-relaxed placeholder-gray-300 box-border"
+                                style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
+                            />
+                            <div className="px-4 py-2 border-t border-gray-100 flex items-center justify-between">
+                                <span className="text-xs text-gray-400">
+                                    {annotationSaveStatus || 'Auto-saves as you type'}
+                                </span>
+                                <span className="text-xs text-gray-300">Private to you</span>
+                            </div>
+                        </div>
+                    </div>
                 </ViewerOverlay>
             )}
         </LayoutContainer>

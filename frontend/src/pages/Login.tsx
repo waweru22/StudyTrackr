@@ -73,14 +73,14 @@ const Login: React.FC = () => {
         <div className="min-h-screen bg-white font-sans text-gray-900 flex flex-col items-center justify-center">
             {/* Header/Logo */}
             <div className="mb-8">
-                <img src={logo} alt="StudyTrackr Logo" className="h-12 w-auto" />
+                <img src={logo} alt="StudyTrackr Logo" className="h-8 w-auto" />
             </div>
 
             {/* Main Content */}
             <main className="w-full max-w-md px-6">
                 <div className="space-y-2 mb-8 text-center">
-                    <h2 className="text-3xl font-bold font-dm-sans text-gray-900">Welcome Back</h2>
-                    <p className="text-gray-500 text-base font-light font-dm-sans">
+                    <h2 className="text-xl font-bold font-dm-sans text-gray-900">Welcome Back</h2>
+                    <p className="text-gray-500 text-sm font-light font-dm-sans">
                         Sign in to continue your learning journey.
                     </p>
                 </div>

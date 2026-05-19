@@ -176,7 +176,7 @@ const StudyTips: React.FC = () => {
                         <Lightbulb className="text-amber-500" size={20} />
                         <span className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Study System</span>
                     </div>
-                    <h1 className="mt-6 text-3xl font-bold text-slate-900">Study Tips & Learning Workflow</h1>
+                    <h1 className="mt-6 text-2xl font-bold text-slate-900">Study Tips & Learning Workflow</h1>
                     <p className="mt-3 max-w-3xl text-sm text-slate-600 leading-7">
                         Deeply practical study techniques for software engineering students. Each method is explained with real steps, why it works, common pitfalls, and ideal use cases.
                     </p>

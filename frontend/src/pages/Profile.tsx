@@ -224,7 +224,7 @@ const Profile: React.FC = () => {
                                 <Award className="text-white fill-current opacity-80" size={24} />
                                 <h3 className="text-lg font-bold opacity-90">Current Badge</h3>
                             </div>
-                            <p className="text-3xl font-black">{profile.badge}</p>
+                            <p className="text-2xl font-black">{profile.badge}</p>
                         </div>
 
                         <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
@@ -232,7 +232,7 @@ const Profile: React.FC = () => {
                                 <h3 className="text-sm font-bold text-gray-500">Total XP</h3>
                                 <Zap className="text-yellow-500 fill-current" size={20} />
                             </div>
-                            <p className="text-4xl font-black text-gray-900">{profile.xp_points} XP</p>
+                            <p className="text-2xl font-black text-gray-900">{profile.xp_points} XP</p>
                         </div>
 
                         <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
@@ -240,7 +240,7 @@ const Profile: React.FC = () => {
                                 <h3 className="text-sm font-bold text-gray-500">Day Streak</h3>
                                 <Flame className="text-orange-500 fill-current" size={20} />
                             </div>
-                            <p className="text-4xl font-black text-gray-900">{profile.streak_count} Days</p>
+                            <p className="text-2xl font-black text-gray-900">{profile.streak_count} Days</p>
                         </div>
                     </div>
                 </div>

@@ -91,6 +91,21 @@ def create_app(config_class=Config):
     except Exception as e:
         print(f"[APP] Firebase init failed (push disabled): {e}")
 
+    # Ensure Pandoc is available for document conversion
+    try:
+        import pypandoc
+        try:
+            version = pypandoc.get_pandoc_version()
+            print(f"[Pandoc] Pandoc {version} ready")
+        except OSError:
+            print("[Pandoc] Pandoc binary not found, downloading...")
+            pypandoc.download_pandoc()
+            print(f"[Pandoc] Pandoc {pypandoc.get_pandoc_version()} ready")
+    except ImportError:
+        print("[Pandoc] pypandoc not installed - run: pip install pypandoc==1.14")
+    except Exception as e:
+        print(f"[Pandoc] Setup failed: {e}")
+
     # ── Rate limit exceeded handler (HTTP 429) ──
     from flask_limiter.errors import RateLimitExceeded
 

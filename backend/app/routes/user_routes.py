@@ -60,10 +60,10 @@ def get_user_profile():
     dominant_env = 'None'
     insights = []
 
-    if total_sessions < 3:
+    if total_sessions == 0:
         insights.append({
             'type': 'info',
-            'text': 'Complete more sessions to see your learning insights.'
+            'text': 'Complete your first session to see your learning insights.'
         })
     else:
         all_sessions = completed_sessions.all()

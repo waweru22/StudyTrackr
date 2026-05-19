@@ -52,8 +52,9 @@ class GamificationService:
     @staticmethod
     def calculate_streak(user_id):
         """
-        Recalculates streak based on completed StudySessions.
-        A streak is maintained if the user completed at least one session today or yesterday.
+        Recalculates streak based on fully completed StudySessions.
+        A day only counts toward the streak if the user has at least one
+        session with completed_on_time=True on that day.
         Streak increments only once per calendar day.
         """
         from app.models.session import StudySession
@@ -66,11 +67,11 @@ class GamificationService:
         today = date.today()
         yesterday = today - timedelta(days=1)
 
-        # Get all days on which the user completed at least one session
+        # Only sessions that were fully completed count toward the streak
         completed_sessions = StudySession.query.filter(
             StudySession.user_id == user_id,
             StudySession.end_time != None,
-            StudySession.success_score != None
+            StudySession.completed_on_time == True
         ).order_by(StudySession.start_time.desc()).all()
 
         if not completed_sessions:
@@ -78,13 +79,13 @@ class GamificationService:
             db.session.commit()
             return
 
-        # Build a set of unique dates with completed sessions
+        # Build a set of unique dates with fully completed sessions
         completed_dates = sorted(
             set(s.start_time.date() for s in completed_sessions),
             reverse=True
         )
 
-        # Check if streak is still active (most recent session today or yesterday)
+        # Check if streak is still active (most recent completed day is today or yesterday)
         if completed_dates[0] < yesterday:
             user.streak_count = 0
             db.session.commit()

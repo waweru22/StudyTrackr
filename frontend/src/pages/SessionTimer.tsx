@@ -381,10 +381,10 @@ const SessionTimer: React.FC = () => {
     const isBreakPhase = phase === 'break';
 
     return (
-        <div className={`min-h-screen flex flex-col items-center justify-center font-sans transition-colors duration-500 ${isBreakPhase ? 'bg-green-50' : 'bg-white'}`}>
+        <div className={`min-h-screen py-8 px-4 flex flex-col items-center justify-center font-sans transition-colors duration-500 ${isBreakPhase ? 'bg-green-50' : 'bg-white'}`}>
 
             {/* Header / Info */}
-            <div className="w-full max-w-4xl px-8 flex justify-between items-start mb-8 text-center">
+            <div className="w-full max-w-4xl px-4 md:px-8 flex justify-between items-start mb-6 md:mb-8 text-center">
                 <div className="flex-1 text-center">
                     <p className="text-sm font-semibold text-blue-800 mb-1">Currently Studying</p>
                     <p className="text-lg text-gray-700 font-medium">
@@ -424,38 +424,38 @@ const SessionTimer: React.FC = () => {
             </div>
 
             {/* Timer Display */}
-            <div className="flex items-center space-x-8 text-gray-900 mb-24">
+            <div className="flex items-center space-x-4 md:space-x-8 text-gray-900 mb-8">
                 {parseInt(h) > 0 && (
                     <>
                         <div className="flex flex-col items-center">
-                            <span className="text-[128px] font-light font-josefin leading-none">{h}</span>
-                            <span className="text-gray-400 text-lg mt-2 font-dm-sans">Hours</span>
+                            <span className="text-[72px] md:text-[96px] lg:text-[128px] font-light font-josefin leading-none">{h}</span>
+                            <span className="text-gray-400 text-sm md:text-lg mt-2 font-dm-sans">Hours</span>
                         </div>
-                        <span className="text-[128px] font-light font-josefin text-gray-900 relative -top-8">:</span>
+                        <span className="text-[72px] md:text-[96px] lg:text-[128px] font-light font-josefin text-gray-900 relative -top-4 md:-top-8">:</span>
                     </>
                 )}
                 <div className="flex flex-col items-center">
-                    <span className="text-[128px] font-light font-josefin leading-none">{m}</span>
-                    <span className="text-gray-400 text-lg mt-2 font-dm-sans">Minutes</span>
+                    <span className="text-[72px] md:text-[96px] lg:text-[128px] font-light font-josefin leading-none">{m}</span>
+                    <span className="text-gray-400 text-sm md:text-lg mt-2 font-dm-sans">Minutes</span>
                 </div>
-                <span className="text-[128px] font-light font-josefin text-gray-900 relative -top-8">:</span>
+                <span className="text-[72px] md:text-[96px] lg:text-[128px] font-light font-josefin text-gray-900 relative -top-4 md:-top-8">:</span>
                 <div className="flex flex-col items-center">
-                    <span className="text-[128px] font-light font-josefin leading-none">{s}</span>
-                    <span className="text-gray-400 text-lg mt-2 font-dm-sans">Seconds</span>
+                    <span className="text-[72px] md:text-[96px] lg:text-[128px] font-light font-josefin leading-none">{s}</span>
+                    <span className="text-gray-400 text-sm md:text-lg mt-2 font-dm-sans">Seconds</span>
                 </div>
             </div>
 
             {/* Action Buttons */}
             {phase !== 'complete' && (
-                <div className="flex flex-col items-center gap-4">
-                    <div className="flex space-x-8">
+                <div className="flex flex-col items-center gap-4 mb-8">
+                    <div className="flex space-x-4 md:space-x-8">
                         <button
                             onClick={() => { pauseTimer(); setShowDistractionAlert(true); setDistractionTimeLeft(300); }}
-                            className="bg-blue-800 hover:bg-blue-900 text-white font-semibold py-4 px-10 rounded-lg text-base shadow-sm transition-transform active:scale-95"
+                            className="bg-blue-800 hover:bg-blue-900 text-white font-semibold py-3 px-6 md:py-4 md:px-10 rounded-lg text-sm md:text-base shadow-sm transition-transform active:scale-95"
                         >Log Distraction</button>
                         <button
                             onClick={() => { pauseTimer(); setShowEndSessionAlert(true); }}
-                            className="bg-red-700 hover:bg-red-800 text-white font-semibold py-4 px-10 rounded-lg text-base shadow-sm transition-transform active:scale-95"
+                            className="bg-red-700 hover:bg-red-800 text-white font-semibold py-3 px-6 md:py-4 md:px-10 rounded-lg text-sm md:text-base shadow-sm transition-transform active:scale-95"
                         >End Session</button>
                     </div>
                     <button

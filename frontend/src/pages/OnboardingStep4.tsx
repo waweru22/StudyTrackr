@@ -79,7 +79,7 @@ const OnboardingStep4: React.FC = () => {
         options: { value: string, label: string }[]
     }) => (
         <div className={`space-y-2 ${errors[field] ? 'p-4 bg-red-50 rounded-lg border border-red-200' : ''}`}>
-            <h3 className={`text-base font-medium font-dm-sans text-gray-900 ${errors[field] ? 'text-red-700' : ''}`}>
+            <h3 className={`text-sm font-medium font-dm-sans text-gray-900 ${errors[field] ? 'text-red-700' : ''}`}>
                 {label} {errors[field] && <span className="text-red-600 text-sm font-normal ml-2">* Required</span>}
             </h3>
             <div className="flex flex-wrap gap-4 md:gap-6">
@@ -96,7 +96,7 @@ const OnboardingStep4: React.FC = () => {
                             />
                             <div className="absolute h-2.5 w-2.5 rounded-full bg-blue-800 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
                         </div>
-                        <span className="text-base font-light font-dm-sans text-gray-600 group-hover:text-gray-900">{option.label}</span>
+                        <span className="text-sm font-light font-dm-sans text-gray-600 group-hover:text-gray-900">{option.label}</span>
                     </label>
                 ))}
             </div>
@@ -123,8 +123,8 @@ const OnboardingStep4: React.FC = () => {
             <main className="w-full max-w-3xl px-6 py-8 flex-grow">
                 <div className="space-y-2 mb-4 pb-4 border-b border-gray-200">
                     <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">4 of 4</p>
-                    <h2 className="text-2xl font-bold font-dm-sans text-gray-900">You're Almost There!</h2>
-                    <p className="text-gray-500 text-base font-light font-dm-sans max-w-2xl">
+                    <h2 className="text-xl font-bold font-dm-sans text-gray-900">You're Almost There!</h2>
+                    <p className="text-gray-500 text-sm font-light font-dm-sans max-w-2xl">
                         Every student is different. We're calibrating your schedule to match your natural focus peaks, so you can spend less time planning and more time mastering.
                     </p>
                 </div>

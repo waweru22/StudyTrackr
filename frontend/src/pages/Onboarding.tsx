@@ -141,7 +141,7 @@ const Onboarding: React.FC = () => {
             </header>
 
             {/* Main Content */}
-            <main className="w-full max-w-xl px-6 py-8 flex-grow">
+            <main className="w-full max-w-lg px-6 py-8 flex-grow">
                 {/* Role Selector Tabs */}
                 <div className="flex bg-gray-100 rounded-lg p-1 mb-8 border border-gray-200">
                     <button
@@ -161,7 +161,7 @@ const Onboarding: React.FC = () => {
 
                 <div className="space-y-2 mb-6">
                     <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">1 of 4</p>
-                    <h2 className="text-2xl font-bold font-dm-sans text-gray-900">Secure Your Progress</h2>
+                    <h2 className="text-xl font-bold font-dm-sans text-gray-900">Secure Your Progress</h2>
                     <p className="text-gray-500 text-base font-light font-dm-sans">
                         Create your account to save your AI-optimized routines and track your growth.
                     </p>
@@ -171,7 +171,7 @@ const Onboarding: React.FC = () => {
                 <form className="space-y-4" onSubmit={handleSubmit}>
                     {/* Email */}
                     <div className="space-y-1.5">
-                        <label className="block text-base font-medium font-dm-sans text-gray-700">
+                        <label className="block text-sm font-medium font-dm-sans text-gray-700">
                             Email <span className="text-red-600">*</span>
                         </label>
                         <input
@@ -197,7 +197,7 @@ const Onboarding: React.FC = () => {
 
                     {/* Username */}
                     <div className="space-y-1.5">
-                        <label className="block text-base font-medium font-dm-sans text-gray-700">
+                        <label className="block text-sm font-medium font-dm-sans text-gray-700">
                             Username <span className="text-red-600">*</span>
                         </label>
                         <input
@@ -219,7 +219,7 @@ const Onboarding: React.FC = () => {
                     {/* Phone & Level */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                            <label className="block text-base font-medium font-dm-sans text-gray-700">
+                            <label className="block text-sm font-medium font-dm-sans text-gray-700">
                                 Phone Number <span className="text-red-600">*</span>
                             </label>
                             <div className="flex items-center w-full px-4 py-3 rounded-lg border bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-shadow shadow-sm ${errors.phone ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}">
@@ -244,7 +244,7 @@ const Onboarding: React.FC = () => {
                             )}
                         </div>
                         <div className="space-y-1.5">
-                            <label className="block text-base font-medium font-dm-sans text-gray-700">
+                            <label className="block text-sm font-medium font-dm-sans text-gray-700">
                                 Level <span className="text-red-600">*</span>
                             </label>
                             <div className="relative">
@@ -277,7 +277,7 @@ const Onboarding: React.FC = () => {
 
                     {/* Password */}
                     <div className="space-y-1.5">
-                        <label className="block text-base font-medium font-dm-sans text-gray-700">
+                        <label className="block text-sm font-medium font-dm-sans text-gray-700">
                             Password <span className="text-red-600">*</span>
                         </label>
                         <div className="relative">
@@ -317,7 +317,7 @@ const Onboarding: React.FC = () => {
 
                     {/* Confirm Password */}
                     <div className="space-y-1.5">
-                        <label className="block text-base font-medium font-dm-sans text-gray-700">
+                        <label className="block text-sm font-medium font-dm-sans text-gray-700">
                             Confirm Password <span className="text-red-600">*</span>
                         </label>
                         <div className="relative">
@@ -356,7 +356,7 @@ const Onboarding: React.FC = () => {
                     </div>
                 </form>
 
-                <p className="mt-6 text-base font-light font-dm-sans text-gray-500">
+                <p className="mt-6 text-sm font-light font-dm-sans text-gray-500">
                     Already have an account? <Link to="/login" className="text-blue-700 font-medium font-dm-sans hover:underline">Sign in</Link>
                 </p>
             </main>

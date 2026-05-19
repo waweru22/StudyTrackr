@@ -42,7 +42,8 @@ def get_notes():
         "created_at": n.created_at,
         "last_edited": n.last_edited,
         "file_path": n.file_path,
-        "file_type": n.file_type
+        "file_type": n.file_type,
+        "annotation": n.annotation or ''
     } for n in notes]), 200
 
 @note_bp.route('/upload', methods=['POST'])
@@ -59,14 +60,24 @@ def upload_note_file():
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
 
-    allowed_extensions = ('.pdf', '.pptx', '.ppt', '.docx')
-    if not file or not file.filename.lower().endswith(allowed_extensions):
-        return jsonify({"error": "Invalid file type. Only PDF, PPTX, and DOCX allowed."}), 400
-
     import os
     from werkzeug.utils import secure_filename
     from flask import current_app
-    
+
+    ext = os.path.splitext(file.filename)[1].lower()
+
+    # Reject PowerPoint files with a specific message
+    if ext in ('.pptx', '.ppt'):
+        return jsonify({
+            "error": "PowerPoint files are not supported. Please save your slides as PDF and upload that instead."
+        }), 400
+
+    allowed_extensions = ('.pdf', '.docx', '.doc', '.txt', '.md')
+    if ext not in allowed_extensions:
+        return jsonify({
+            "error": "Please upload a PDF, Word document (.docx/.doc), or text file (.txt/.md)."
+        }), 400
+
     filename = secure_filename(file.filename)
     upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
     if not os.path.exists(upload_folder):
@@ -75,22 +86,24 @@ def upload_note_file():
     save_path = os.path.join(upload_folder, filename)
     file.save(save_path)
     
-    # Convert non-PDF files to PDF using LibreOffice
-    if not filename.lower().endswith('.pdf'):
+    # Convert non-PDF files to HTML using Pandoc
+    file_type = 'pdf'
+    if ext != '.pdf':
         try:
-            from app.utils.file_converter import convert_to_pdf
-            pdf_path = convert_to_pdf(save_path, upload_folder)
-            # Delete the original file after successful conversion
-            os.remove(save_path)
-            filename = os.path.basename(pdf_path)
-            print(f"Converted to PDF: {filename}", flush=True)
+            from app.utils.file_converter import convert_document
+            output_path, file_type = convert_document(save_path, upload_folder)
+            # Remove the original uploaded file after successful conversion
+            if output_path != save_path and os.path.exists(save_path):
+                os.remove(save_path)
+            filename = os.path.basename(output_path)
+            print(f"Converted to {file_type.upper()}: {filename}", flush=True)
         except Exception as e:
             # Clean up the uploaded file on failure
             if os.path.exists(save_path):
                 os.remove(save_path)
-            print(f"LibreOffice conversion failed: {e}", flush=True)
+            print(f"Document conversion failed: {e}", flush=True)
             return jsonify({
-                "error": "File conversion failed. Make sure LibreOffice is installed."
+                "error": "File conversion failed. Please try a different file format."
             }), 500
     
     note = Note(
@@ -98,7 +111,7 @@ def upload_note_file():
         title=title,
         content=f"File upload: {filename}",
         file_path=filename,
-        file_type='pdf'  # Always PDF after conversion
+        file_type=file_type
     )
     db.session.add(note)
     db.session.commit()
@@ -117,6 +130,7 @@ def update_note(note_id):
         
     if 'title' in data: note.title = data['title']
     if 'content' in data: note.content = data['content']
+    if 'annotation' in data: note.annotation = data['annotation']
     
     db.session.commit()
     return jsonify({"message": "Note updated"}), 200
@@ -153,9 +167,79 @@ def serve_note_file(filename):
     upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
     try:
         response = make_response(send_from_directory(upload_folder, filename, as_attachment=False))
-        response.headers['Content-Type'] = 'application/pdf'
+        ext = os.path.splitext(filename)[1].lower()
+        if ext == '.html':
+            response.headers['Content-Type'] = 'text/html; charset=utf-8'
+        else:
+            response.headers['Content-Type'] = 'application/pdf'
         response.headers['Content-Disposition'] = 'inline'
         return response
     except FileNotFoundError:
         abort(404)
 
+@note_bp.route('/<int:note_id>/replace-file', methods=['PUT'])
+@jwt_required()
+def replace_note_file(note_id):
+    """Replace the uploaded file for a note while preserving the annotation."""
+    user_id = int(get_jwt_identity())
+    note = Note.query.filter_by(id=note_id, user_id=user_id).first()
+
+    if not note:
+        return jsonify({"error": "Note not found"}), 404
+    if not note.file_path:
+        return jsonify({"error": "This note has no file to replace"}), 400
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    import os
+    from werkzeug.utils import secure_filename
+    from flask import current_app
+
+    ext = os.path.splitext(file.filename)[1].lower()
+
+    if ext in ('.pptx', '.ppt'):
+        return jsonify({
+            "error": "PowerPoint files are not supported. Please save your slides as PDF and upload that instead."
+        }), 400
+
+    allowed_extensions = ('.pdf', '.docx', '.doc', '.txt', '.md')
+    if ext not in allowed_extensions:
+        return jsonify({
+            "error": "Please upload a PDF, Word document (.docx/.doc), or text file (.txt/.md)."
+        }), 400
+
+    upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
+
+    # Remove old file
+    old_path = os.path.join(upload_folder, note.file_path)
+    if os.path.exists(old_path):
+        os.remove(old_path)
+
+    filename = secure_filename(file.filename)
+    save_path = os.path.join(upload_folder, filename)
+    file.save(save_path)
+
+    file_type = 'pdf'
+    if ext != '.pdf':
+        try:
+            from app.utils.file_converter import convert_document
+            output_path, file_type = convert_document(save_path, upload_folder)
+            if output_path != save_path and os.path.exists(save_path):
+                os.remove(save_path)
+            filename = os.path.basename(output_path)
+        except Exception as e:
+            if os.path.exists(save_path):
+                os.remove(save_path)
+            return jsonify({"error": "File conversion failed."}), 500
+
+    note.file_path = filename
+    note.file_type = file_type
+    # annotation is deliberately NOT cleared
+    db.session.commit()
+
+    return jsonify({"message": "File replaced", "file_path": filename, "file_type": file_type}), 200
