@@ -81,6 +81,9 @@ def create_app(config_class=Config):
     from app.routes.notification_routes import notification_bp
     app.register_blueprint(notification_bp, url_prefix='/notifications')
 
+    from app.routes.timetable_routes import timetable_bp
+    app.register_blueprint(timetable_bp, url_prefix='/timetable')
+
     # Initialize Firebase Cloud Messaging (non-blocking)
     try:
         from app.services.fcm_service import FCMService

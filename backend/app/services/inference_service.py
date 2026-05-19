@@ -1,8 +1,117 @@
 from datetime import datetime, timedelta, time, timezone
+from datetime import time as dt_time
+
 from app import db
 from app.models.session import ScheduleBlock
 from app.models.course import Course
+from app.models.timetable_entry import TimetableEntry
 from app.services.rule_engine import RuleEngine
+
+
+def get_blocked_slots(user_id: int) -> dict:
+    '''
+    Returns a dict of day → list of (start_time, end_time)
+    tuples representing class times.
+    '''
+    entries = TimetableEntry.query.filter_by(
+        user_id=user_id
+    ).all()
+
+    blocked = {}
+    for entry in entries:
+        day = entry.day_of_week
+        if day not in blocked:
+            blocked[day] = []
+        blocked[day].append((entry.start_time, entry.end_time))
+
+    return blocked
+
+
+def is_slot_blocked(
+    day: str,
+    start: dt_time,
+    end: dt_time,
+    blocked_slots: dict
+) -> bool:
+    '''
+    Returns True if the given time slot overlaps with any
+    class on that day.
+    '''
+    if day not in blocked_slots:
+        return False
+
+    for (class_start, class_end) in blocked_slots[day]:
+        if start < class_end and end > class_start:
+            return True
+
+    return False
+
+
+def _hour_candidates(
+    day_name: str,
+    preferred_hour: int,
+    blocked_slots: dict,
+) -> list:
+    '''Prefer slots after classes, then peak time, then evening.'''
+    last_class_hour = 6
+    for _start, end in blocked_slots.get(day_name, []):
+        end_hour = end.hour + (1 if end.minute else 0)
+        last_class_hour = max(last_class_hour, end_hour)
+
+    candidates = []
+    seen = set()
+
+    def add(hour: int):
+        if 7 <= hour <= 22 and hour not in seen:
+            seen.add(hour)
+            candidates.append(hour)
+
+    for hour in range(max(7, last_class_hour), 23):
+        add(hour)
+
+    for offset in range(0, 16):
+        for hour in (preferred_hour + offset, preferred_hour - offset):
+            add(hour)
+
+    for hour in (18, 19, 20, 21, 22):
+        add(hour)
+
+    return candidates
+
+
+def _find_unblocked_hour(
+    day_name: str,
+    duration_minutes: int,
+    preferred_hour: int,
+    blocked_slots: dict,
+    day_used_slots: list,
+):
+    '''Return a start hour with no class or study-block overlap, or None.'''
+    candidates = _hour_candidates(day_name, preferred_hour, blocked_slots)
+
+    for hour in candidates:
+        candidate_start = time(hour, 0)
+        end_dt = datetime.combine(
+            datetime.today().date(), candidate_start
+        ) + timedelta(minutes=duration_minutes)
+        candidate_end = end_dt.time()
+
+        if is_slot_blocked(
+            day_name, candidate_start, candidate_end, blocked_slots
+        ):
+            continue
+
+        overlaps_study = False
+        for used_start, used_end in day_used_slots:
+            if candidate_start < used_end and candidate_end > used_start:
+                overlaps_study = True
+                break
+        if overlaps_study:
+            continue
+
+        return hour
+
+    return None
 
 
 # --- Template Configuration ---
@@ -10,13 +119,13 @@ TEMPLATE_CONFIG = {
     'pomodoro': {
         'technique_name': 'Pomodoro',
         'technique_details': 'Work for 25 minutes, take a 5-minute break. After 4 cycles, take a longer 15-minute break.',
-        'base_duration': 50,
+        'base_duration': 25,
         'block_type': 'Pomodoro Session'
     },
     'deep_work': {
         'technique_name': 'Deep Work',
         'technique_details': 'Eliminate all distractions. Work with full concentration for the entire block.',
-        'base_duration': 90,
+        'base_duration': None,
         'block_type': 'Deep Work'
     },
     'active_recall': {
@@ -147,6 +256,16 @@ class InferenceService:
             reverse=True,
         )
 
+        def template_duration(slot_is_alternate: bool = False) -> int:
+            if template_key == 'deep_work':
+                base = user.zone_duration or 90
+                if not slot_is_alternate and ranked_courses:
+                    heaviest = ranked_courses[0]
+                    if heaviest.weight >= 4:
+                        base = min(base + 30, 120)
+                return base
+            return template_cfg['base_duration']
+
         # ── 3. CLEAR OLD BLOCKS ──────────────────────────────────────
         db.session.query(ScheduleBlock).filter_by(user_id=user.id).delete()
 
@@ -155,6 +274,13 @@ class InferenceService:
 
         # Track low efficacy flag for next-day technique swap
         apply_review_swap = False
+
+        from app.services.timetable_service import user_has_timetable
+
+        if user_has_timetable(user.id):
+            blocked_slots = get_blocked_slots(user.id)
+        else:
+            blocked_slots = {}
 
         # ── 5. CALENDAR ALIGNMENT — start from Monday ────────────────
         today = datetime.now(LAGOS_TZ).date()
@@ -193,13 +319,6 @@ class InferenceService:
             # Heaviest course always goes in slot 1 (peak window)
             day_courses.sort(key=lambda c: c.weight * c.credits, reverse=True)
 
-            # ─── STEP 3: Determine start times ──────────────────────
-            slot_hours = []
-            for slot_idx in range(day_block_count):
-                h = base_peak + (slot_idx * 3)
-                h = min(h, 22)
-                slot_hours.append(h)
-
             # ─── Determine which slot gets alternate technique ───────
             # Problem 3: Per-day technique distribution
             # Peak slot (index 0) always uses primary template
@@ -211,9 +330,12 @@ class InferenceService:
             else:
                 alternate_slot_idx = -1  # Single block = always primary
 
-            # ─── STEP 4 & 5: Build each block ───────────────────────
+            # ─── STEP 3–5: Build each block (with class conflict check) ─
+            day_used_slots = []
+            blocks_to_save = []
+
             for slot_idx, c_obj in enumerate(day_courses):
-                hour = slot_hours[slot_idx]
+                preferred_hour = min(base_peak + (slot_idx * 3), 22)
                 is_peak_slot = (slot_idx == 0)
 
                 # --- Sunday: always Spaced Repetition ---
@@ -229,16 +351,18 @@ class InferenceService:
                     tech_name = alt['technique_name']
                     tech_details = alt['technique_details']
                     block_type = alt['block_type']
-                    duration = template_cfg['base_duration']
+                    duration = template_duration(slot_is_alternate=True)
+                    if tech_name == 'Blurting (Active Recall)':
+                        duration = 35
+                    elif tech_name == 'Spaced Repetition Review':
+                        duration = 35
 
                 # --- Primary template slot ---
                 else:
                     tech_name = template_cfg['technique_name']
                     tech_details = template_cfg['technique_details']
                     block_type = template_cfg['block_type']
-                    duration = template_cfg['base_duration']
-                    if template_key == 'deep_work' and c_obj.weight >= 4:
-                        duration = 120
+                    duration = template_duration()
 
                 # Cap at focus_threshold
                 if focus_threshold and isinstance(focus_threshold, int) and focus_threshold < duration:
@@ -262,7 +386,7 @@ class InferenceService:
 
                 # --- Rule engine refinement (schedule rules only) ---
                 pred_ctx = RuleEngine.get_predictive_context(
-                    user_id, day_name, hour
+                    user_id, day_name, preferred_hour
                 )
                 rule_context = user_context.copy()
                 rule_context.update(
@@ -300,15 +424,28 @@ class InferenceService:
                 if tech_name in ('Spaced Repetition Review', 'Blurting (Active Recall)') and day_name != 'Sunday':
                     duration = 35
 
-                # ─── SAVE BLOCK ──────────────────────────────────────
+                hour = _find_unblocked_hour(
+                    day_name,
+                    duration,
+                    preferred_hour,
+                    blocked_slots,
+                    day_used_slots,
+                )
+                if hour is None:
+                    blocks_to_save = None
+                    break
+
                 start_dt = datetime.combine(current_day, time(hour, 0))
-                db.session.add(
+                end_dt = start_dt + timedelta(minutes=duration)
+                day_used_slots.append((start_dt.time(), end_dt.time()))
+
+                blocks_to_save.append(
                     ScheduleBlock(
                         user_id=user.id,
                         date=current_day,
                         day_of_week=day_name,
                         start_time=start_dt.time(),
-                        end_time=(start_dt + timedelta(minutes=duration)).time(),
+                        end_time=end_dt.time(),
                         block_type=block_type,
                         status="upcoming",
                         technique_name=tech_name,
@@ -319,6 +456,12 @@ class InferenceService:
                         suggested_medium=suggested_medium,
                     )
                 )
+
+            if blocks_to_save is None:
+                continue
+
+            for block in blocks_to_save:
+                db.session.add(block)
 
             # ─── End-of-day: check efficacy for next day swap ────────
             apply_review_swap = avg_efficacy is not None and avg_efficacy < 2.5

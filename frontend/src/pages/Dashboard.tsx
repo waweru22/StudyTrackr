@@ -27,8 +27,12 @@ const Dashboard: React.FC = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const data = await api.get<DashboardData>('/dashboard');
-                setDashboardData(data);
+                const [dashboard, notifications] = await Promise.all([
+                    api.get<DashboardData>('/dashboard'),
+                    api.get<{ id: number; title: string; type: string; created_at: string }[]>('/notifications/').catch(() => []),
+                ]);
+                setDashboardData(dashboard);
+                setRecentNotifications(notifications.slice(0, 3));
             } catch (error) {
                 console.error("Failed to fetch dashboard data", error);
             } finally {
@@ -36,11 +40,6 @@ const Dashboard: React.FC = () => {
             }
         };
         fetchData();
-
-        // Fetch recent notifications for the activity card
-        api.get<{ id: number; title: string; type: string; created_at: string }[]>('/notifications/')
-            .then(data => setRecentNotifications(data.slice(0, 3)))
-            .catch(() => { });
     }, []);
 
     // Fetch focus pulse data (P4)
@@ -148,6 +147,23 @@ const Dashboard: React.FC = () => {
                             <div className="flex justify-between items-start mb-4">
                                 <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wide">Next Session</h3>
                             </div>
+                            {!dashboardData?.schedule_ready ? (
+                                <div>
+                                    <p className="text-gray-700 mb-4">
+                                        {dashboardData?.timetable_uploaded
+                                            ? '📅 Confirm your timetable on the Schedule page to generate your study plan.'
+                                            : '📋 Upload your timetable to get your study schedule.'}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate('/schedule')}
+                                        className="bg-blue-800 hover:bg-blue-900 text-white font-semibold py-2.5 px-6 rounded-lg text-sm shadow-sm transition-all"
+                                    >
+                                        Go to Schedule
+                                    </button>
+                                </div>
+                            ) : (
+                            <>
                             <div className="flex items-start justify-between">
                                 <div className="flex items-start space-x-4">
                                     <div className="h-16 w-16 bg-blue-50 rounded-xl flex items-center justify-center p-2">
@@ -182,6 +198,8 @@ const Dashboard: React.FC = () => {
                                     Start Session
                                 </button>
                             </div>
+                            </>
+                            )}
                         </div>
 
                         {/* Quote of the Day */}

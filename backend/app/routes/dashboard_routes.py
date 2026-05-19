@@ -42,8 +42,14 @@ def get_dashboard():
             ScheduleBlock.status == 'upcoming'
         ).order_by(ScheduleBlock.date.asc(), ScheduleBlock.start_time.asc()).first()
         
-    # Do not show upcoming sessions if user is not verified by admin
-    if not user.is_verified:
+    from app.services.timetable_service import (
+        ensure_timetable_flag,
+        has_schedule_blocks,
+    )
+    has_timetable = ensure_timetable_flag(user_id)
+    schedule_ready = has_schedule_blocks(user_id)
+
+    if not user.is_verified or not schedule_ready:
         next_session = None
     
     # Unified Feed
@@ -104,6 +110,8 @@ def get_dashboard():
         "streak": user.streak_count,
         "badge": user.badge,
         "xp": user.xp_points,
+        "timetable_uploaded": has_timetable,
+        "schedule_ready": schedule_ready,
         "next_session": {
             "id": next_session.id if next_session else None,
             "course": next_session.course.code if next_session and next_session.course else "None",

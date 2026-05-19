@@ -19,7 +19,11 @@ class MaterialScraper:
             print("Warning: GOOGLE_API_KEY not found in environment variables.", flush=True)
             self.client = None
         else:
-            self.client = genai.Client(api_key=self.api_key)
+            try:
+                self.client = genai.Client(api_key=self.api_key)
+            except Exception as e:
+                print(f"[Gemini] Client creation failed: {type(e).__name__}: {e}", flush=True)
+                self.client = None
 
     def _interpret_query(self, raw_query: str) -> str:
         """
@@ -41,12 +45,13 @@ Examples:
 "how computers remember things" → "memory management computer science"
 """
         response = self.client.models.generate_content(
-            model='gemini-2.5-flash-lite',
+            # model='gemini-2.5-flash-lite',
+            model='gemini-2.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(temperature=0),
         )
         interpreted = response.text.strip()
-        print(f"  Query interpreted: '{raw_query}' → '{interpreted}'", flush=True)
+        print(f"  Query interpreted: '{raw_query}' -> '{interpreted}'", flush=True)
         return interpreted
 
     def fetch_academic_materials(self, course_name: str) -> List[Dict]:
@@ -74,7 +79,7 @@ Prioritize resources that show full content immediately without login — tutori
 Do not include resources that require registration or payment."""
 
             response = self.client.models.generate_content(
-                model='gemini-2.5-flash-lite',
+                model='gemini-2.5-flash',
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     tools=[types.Tool(google_search=types.GoogleSearch())],
@@ -104,7 +109,7 @@ Do not include resources that require registration or payment."""
                         "type": "textbook",
                         "learning_style_tag": "Read/Write"
                     })
-                    print(f"  ✓ Added: {url}", flush=True)
+                    print(f"  [+] Added: {url}", flush=True)
 
                     if len(materials) >= 5:
                         break
@@ -113,5 +118,5 @@ Do not include resources that require registration or payment."""
             return materials
 
         except Exception as e:
-            print(f"\n!!! Error fetching materials from Gemini: {e} !!!\n", flush=True)
+            print(f"[Gemini] Error: {type(e).__name__}: {e}", flush=True)
             return []

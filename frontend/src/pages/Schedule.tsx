@@ -5,6 +5,7 @@ import Sidebar from '../components/Sidebar';
 import { api } from '../api/client';
 import { useUser } from '../context/UserContext';
 import SessionModal from '../components/SessionModal';
+import TimetableUpload, { type ClassEntry } from '../components/TimetableUpload';
 import type { ScheduleData, SessionBlock } from '../types';
 
 // --- Icons ---
@@ -347,69 +348,150 @@ const Schedule: React.FC = () => {
     const [schedule, setSchedule] = useState<ScheduleData | null>(null);
     const [loading, setLoading] = useState(true);
     const [selectedSession, setSelectedSession] = useState<SessionBlock | null>(null);
-    const [regenerating, setRegenerating] = useState(false);
-    const [adapting, setAdapting] = useState(false);
     const [isEmailUnverified, setIsEmailUnverified] = useState(false);
+    const [timetableUploaded, setTimetableUploaded] = useState<boolean | null>(null);
+    const [needsGeneration, setNeedsGeneration] = useState(false);
+    const [pendingClasses, setPendingClasses] = useState<ClassEntry[]>([]);
+    const [generating, setGenerating] = useState(false);
+    const [fetchError, setFetchError] = useState(false);
 
     // Process incoming navigation state from SessionTimer
     useEffect(() => {
         const state = location.state as { completedBlockId?: number; outcome?: string } | null;
         if (state?.completedBlockId && state?.outcome) {
             localStorage.setItem(`block_status_${state.completedBlockId}`, state.outcome);
-            // Clear navigation state so refresh doesn't re-process
             navigate(location.pathname, { replace: true, state: null });
         }
-    }, [location.state]);
+    }, [location.state, location.pathname, navigate]);
 
     useEffect(() => {
-        const fetchSchedule = async () => {
+        let cancelled = false;
+
+        const load = async () => {
+            setLoading(true);
+            setSchedule(null);
             try {
+                const timetable = await api.get<{
+                    timetable_uploaded: boolean;
+                    schedule_generated: boolean;
+                    classes: ClassEntry[];
+                }>('/timetable/my-classes');
+                if (cancelled) return;
+
+                if (!timetable.timetable_uploaded) {
+                    setTimetableUploaded(false);
+                    setNeedsGeneration(false);
+                    return;
+                }
+
+                setTimetableUploaded(true);
+
+                if (!timetable.schedule_generated) {
+                    setPendingClasses(timetable.classes || []);
+                    setNeedsGeneration(true);
+                    return;
+                }
+
                 const data = await api.get<ScheduleData>('/schedule');
+                if (cancelled) return;
+
+                if (!data.schedule_generated) {
+                    setPendingClasses(timetable.classes || []);
+                    setNeedsGeneration(true);
+                    return;
+                }
+
+                setNeedsGeneration(false);
                 setSchedule(data);
-            } catch (err: any) {
-                if (err?.message?.toLowerCase().includes('verify your email')) {
+            } catch (err: unknown) {
+                if (cancelled) return;
+                const message = err instanceof Error ? err.message : '';
+                if (message.toLowerCase().includes('verify your email')) {
                     setIsEmailUnverified(true);
                 }
-                console.error("Failed to fetch schedule", err);
+                setTimetableUploaded(false);
+                console.error('Failed to load schedule page', err);
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
         };
-        fetchSchedule();
+
+        load();
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
-    const handleRegenerate = async () => {
-        if (!window.confirm('Regenerate your entire weekly schedule? This will replace all current blocks.')) return;
-        setRegenerating(true);
-        try {
-            await api.post('/schedule/regenerate', {});
-            // Clear all block_* keys for the new week
-            const keysToRemove = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.startsWith('block_')) keysToRemove.push(key);
+    const clearBlockStatusCache = () => {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('block_')) keysToRemove.push(key);
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+    };
+
+    const fetchScheduleWithRetry = async (retries = 3, delayMs = 1500) => {
+        for (let i = 0; i < retries; i++) {
+            try {
+                const data = await api.get<ScheduleData>('/schedule');
+                const hasBlocks =
+                    data &&
+                    ((data.today_blocks && data.today_blocks.length > 0) ||
+                        (data.weekly_summary && Object.values(data.weekly_summary).some((d: any) => d && d.length > 0)));
+
+                if (hasBlocks) {
+                    setSchedule(data);
+                    setNeedsGeneration(false);
+                    setFetchError(false);
+                    return;
+                }
+            } catch (err) {
+                console.error(`Schedule fetch attempt ${i + 1} failed`, err);
             }
-            keysToRemove.forEach(k => localStorage.removeItem(k));
-            
+
+            if (i < retries - 1) {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+        }
+
+        // After all retries — treat as genuinely empty (not an error)
+        try {
             const data = await api.get<ScheduleData>('/schedule');
             setSchedule(data);
-        } catch (err) {
-            console.error('Failed to regenerate schedule', err);
-        } finally {
-            setRegenerating(false);
+            setNeedsGeneration(false);
+            setFetchError(false);
+        } catch {
+            setFetchError(true);
         }
     };
 
-    const handleAdapt = async () => {
-        setAdapting(true);
+    const handleTimetableConfirmed = async (classes: ClassEntry[]) => {
+        setTimetableUploaded(true);
+        setPendingClasses(classes);
+        setGenerating(true);
         try {
-            await api.post('/schedule/adapt-now', {});
-            const data = await api.get<ScheduleData>('/schedule');
-            setSchedule(data);
+            await api.post('/schedule/generate-initial', {});
+            clearBlockStatusCache();
+            await fetchScheduleWithRetry();
         } catch (err) {
-            console.error('Adaptation failed:', err);
+            console.error('Failed to generate schedule after timetable upload', err);
+            setNeedsGeneration(true);
         } finally {
-            setAdapting(false);
+            setGenerating(false);
+        }
+    };
+
+    const handleGenerateFromPending = async () => {
+        setGenerating(true);
+        try {
+            await api.post('/schedule/generate-initial', {});
+            clearBlockStatusCache();
+            await fetchScheduleWithRetry();
+        } catch (err) {
+            console.error('Failed to generate schedule', err);
+        } finally {
+            setGenerating(false);
         }
     };
 
@@ -418,7 +500,11 @@ const Schedule: React.FC = () => {
         setSelectedSession(block);
     };
 
-    if (loading) return (
+    const username = user?.username || 'Student';
+    const level = user?.level || '100';
+    const avatarSrc = `https://ui-avatars.com/api/?name=${username}&background=random&color=fff&background=4F46E5`;
+
+    if (loading || timetableUploaded === null) return (
         <LayoutContainer>
             <Sidebar />
             <MainContent>
@@ -449,26 +535,132 @@ const Schedule: React.FC = () => {
         );
     }
 
+    if (timetableUploaded === false) {
+        return (
+            <LayoutContainer>
+                <Sidebar />
+                <MainContent>
+                    <TopBar>
+                        <Breadcrumb>
+                            <BreadcrumbItem>
+                                <span className="label">Semester</span>
+                                <span className="value">{semester || '1'}</span>
+                            </BreadcrumbItem>
+                            <BreadcrumbItem>
+                                <span className="label">Level</span>
+                                <span className="value">{level}</span>
+                            </BreadcrumbItem>
+                        </Breadcrumb>
+                        <UserProfile>
+                            <span className="name">{username}</span>
+                            <Avatar src={avatarSrc} alt="Profile" />
+                        </UserProfile>
+                    </TopBar>
+                    <div className="upload-timetable-banner p-8 border-2 border-dashed border-indigo-200 bg-indigo-50 rounded-xl max-w-2xl">
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">Upload Your Class Timetable</h3>
+                        <p className="text-gray-600 mb-6">
+                            Upload your official Nile University timetable
+                            so your study schedule avoids your class times.
+                        </p>
+                        <TimetableUpload onUploadComplete={handleTimetableConfirmed} />
+                    </div>
+                </MainContent>
+            </LayoutContainer>
+        );
+    }
+
+    if (needsGeneration) {
+        return (
+            <LayoutContainer>
+                <Sidebar />
+                <MainContent>
+                    <TopBar>
+                        <Breadcrumb>
+                            <BreadcrumbItem>
+                                <span className="label">Semester</span>
+                                <span className="value">{semester || '1'}</span>
+                            </BreadcrumbItem>
+                            <BreadcrumbItem>
+                                <span className="label">Level</span>
+                                <span className="value">{level}</span>
+                            </BreadcrumbItem>
+                        </Breadcrumb>
+                        <UserProfile>
+                            <span className="name">{username}</span>
+                            <Avatar src={avatarSrc} alt="Profile" />
+                        </UserProfile>
+                    </TopBar>
+                    <div className="p-8 border-2 border-dashed border-indigo-200 bg-indigo-50 rounded-xl max-w-3xl">
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">Confirm Your Timetable</h3>
+                        <p className="text-gray-600 mb-4">
+                            We saved {pendingClasses.length} class
+                            {pendingClasses.length !== 1 ? 'es' : ''} from your file.
+                            Generate your study schedule when you are ready.
+                        </p>
+                        {pendingClasses.length > 0 && (
+                            <div className="overflow-x-auto border border-gray-200 rounded-lg mb-6 max-h-64">
+                                <table className="min-w-full text-sm">
+                                    <thead className="bg-gray-50 sticky top-0">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left font-semibold text-gray-600">Code</th>
+                                            <th className="px-3 py-2 text-left font-semibold text-gray-600">Day</th>
+                                            <th className="px-3 py-2 text-left font-semibold text-gray-600">Time</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {pendingClasses.map((cls, idx) => (
+                                            <tr key={idx} className="border-t border-gray-100">
+                                                <td className="px-3 py-2 font-mono">{cls.course_code}</td>
+                                                <td className="px-3 py-2">{cls.day}</td>
+                                                <td className="px-3 py-2">{cls.start_time} – {cls.end_time}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                        <button
+                            type="button"
+                            onClick={handleGenerateFromPending}
+                            disabled={generating || pendingClasses.length === 0}
+                            className="w-full bg-blue-800 hover:bg-blue-900 disabled:opacity-50 text-white font-semibold py-2.5 px-4 rounded-lg text-sm"
+                        >
+                            {generating ? 'Generating schedule…' : 'Generate My Study Schedule'}
+                        </button>
+                    </div>
+                </MainContent>
+            </LayoutContainer>
+        );
+    }
+
     if (!schedule) return (
         <LayoutContainer>
             <Sidebar />
             <MainContent>
-                <div className="p-8 text-center text-red-500">
-                    Unable to load schedule. Please try refreshing.
-                </div>
+                {fetchError ? (
+                    <div className="p-8 text-center text-red-500">
+                        Unable to load schedule. Please try refreshing.
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-center h-64">
+                        <div className="text-center p-8 border-2 border-dashed border-gray-200 rounded-xl max-w-lg">
+                            <span className="text-3xl mb-3 block">📅</span>
+                            <h3 className="text-lg font-bold text-gray-900 mb-2">Your schedule is being prepared</h3>
+                            <p className="text-gray-500 text-sm">
+                                Refresh the page in a moment if nothing appears.
+                            </p>
+                        </div>
+                    </div>
+                )}
             </MainContent>
         </LayoutContainer>
     );
 
     const { today_blocks, weekly_summary } = schedule;
-    const username = user?.username || 'Student';
-    const level = user?.level || '100';
-    const avatarSrc = `https://ui-avatars.com/api/?name=${username}&background=random&color=fff&background=4F46E5`;
 
     // Helper to determine day status
     const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-    // Helper to determine day status
     const getDayStatus = (dayName: string) => {
         const todayIndex = new Date().getDay(); // 0=Sun, 1=Mon...
         // Map "Monday" -> 1, "Sunday" -> 0 to match getDay()
@@ -501,52 +693,10 @@ const Schedule: React.FC = () => {
                         </BreadcrumbItem>
                     </Breadcrumb>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <button
-                            onClick={handleAdapt}
-                            disabled={adapting}
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                padding: '0.5rem 1rem', borderRadius: '0.5rem',
-                                border: 'none', background: '#4F46E5',
-                                color: 'white', fontSize: '0.85rem', fontWeight: 600,
-                                cursor: adapting ? 'not-allowed' : 'pointer',
-                                opacity: adapting ? 0.6 : 1,
-                                transition: 'all 0.2s',
-                            }}
-                        >
-                            {adapting ? (
-                                <>
-                                    <svg style={{ animation: 'spin 1s linear infinite', width: 16, height: 16 }} viewBox="0 0 24 24" fill="none">
-                                        <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                                        <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                                    </svg>
-                                    Adapting...
-                                </>
-                            ) : (
-                                '✨ Adapt Schedule'
-                            )}
-                        </button>
-                        <button
-                            onClick={handleRegenerate}
-                            disabled={regenerating}
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                padding: '0.5rem 1rem', borderRadius: '0.5rem',
-                                border: '1px solid #E2E8F0', background: 'white',
-                                color: '#475569', fontSize: '0.85rem', fontWeight: 600,
-                                cursor: regenerating ? 'not-allowed' : 'pointer',
-                                opacity: regenerating ? 0.6 : 1,
-                                transition: 'all 0.2s',
-                            }}
-                        >
-                            {regenerating ? '⏳ Regenerating...' : '🔄 Regenerate Schedule'}
-                        </button>
-                        <UserProfile>
-                            <span className="name">{username}</span>
-                            <Avatar src={avatarSrc} alt="Profile" />
-                        </UserProfile>
-                    </div>
+                    <UserProfile>
+                        <span className="name">{username}</span>
+                        <Avatar src={avatarSrc} alt="Profile" />
+                    </UserProfile>
                 </TopBar>
 
                 <SectionTitle>Today's Schedule</SectionTitle>
@@ -600,7 +750,7 @@ const Schedule: React.FC = () => {
                                                 <TimelineItem key={`${day}-${idx}`}>
                                                     <Dot style={{ backgroundColor: isToday ? '#6366F1' : '#CBD5E1' }} />
                                                     <div className="flex flex-col">
-                                                        <TimeLabel>{b.start_time}-{b.end_time || '?'}</TimeLabel>
+                                                        <TimeLabel>{b.start_time?.slice(0, 5)}-{b.end_time?.slice(0, 5) || '?'}</TimeLabel>
                                                         <CourseLabel>{b.course_code}</CourseLabel>
                                                     </div>
                                                     {b.technique_name && (
@@ -619,6 +769,7 @@ const Schedule: React.FC = () => {
                         })}
                     </WeekGrid>
                 </WeekSection>
+
             </MainContent>
             <SessionModal
                 isOpen={!!selectedSession}

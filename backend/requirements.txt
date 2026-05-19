@@ -8,3 +8,4 @@ flask-cors==4.0.0
 Flask-Limiter==3.5.0
 Flask-Mail==0.9.1
 google-genai
+openpyxl>=3.1.0

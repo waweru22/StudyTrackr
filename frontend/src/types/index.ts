@@ -66,6 +66,8 @@ export interface WeeklyBlock {
 export interface ScheduleData {
     today_blocks: SessionBlock[];
     weekly_summary: Record<string, WeeklyBlock[]>;
+    timetable_uploaded?: boolean;
+    schedule_generated?: boolean;
 }
 
 export interface DashboardData {
@@ -73,6 +75,8 @@ export interface DashboardData {
     streak: number;
     badge: string;
     xp: number;
+    timetable_uploaded?: boolean;
+    schedule_ready?: boolean;
     quote?: {
         text: string;
         author: string;

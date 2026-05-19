@@ -45,71 +45,106 @@ def get_user_profile():
     if not user:
         return jsonify({"error": "User not found"}), 404
         
-    # ── Adaptation Insights ──
-    from app.services.rule_engine import RuleEngine
-    user_context = RuleEngine.get_user_context(user_id)
+    # ── Session-Derived Learning Insights ──
+    from sqlalchemy import func
 
-    dominant_env = user_context.get('dominant_environment', 'None')
-    env_consistency = round(user_context.get('session_location_consistency', 0) * 100)
-    avg_efficacy = round(user_context.get('avg_session_efficacy', 0), 1)
-
-    total_sessions = StudySession.query.filter(
+    completed_sessions = StudySession.query.filter(
         StudySession.user_id == user_id,
         StudySession.end_time != None
-    ).count()
+    )
 
+    total_sessions = completed_sessions.count()
+
+    # Compute aggregate stats used below
+    avg_efficacy = 0.0
+    dominant_env = 'None'
     insights = []
-    if total_sessions == 0:
+
+    if total_sessions < 3:
         insights.append({
             'type': 'info',
-            'text': 'No sessions logged yet. Complete your first session to start personalising your schedule.'
+            'text': 'Complete more sessions to see your learning insights.'
         })
     else:
-        if dominant_env != 'None' and env_consistency >= 50:
+        all_sessions = completed_sessions.all()
+
+        # ── Average session score ──
+        scores = [s.success_score for s in all_sessions if s.success_score is not None]
+        avg_efficacy = round(sum(scores) / len(scores), 1) if scores else 0.0
+        if avg_efficacy > 0:
             insights.append({
-                'type': 'positive',
-                'text': f"{env_consistency}% of your sessions have been in {dominant_env}. Your schedule prioritises conditions that match this environment."
+                'type': 'positive' if avg_efficacy >= 3.5 else 'neutral',
+                'text': f"Your average session effectiveness score is {avg_efficacy}/5."
             })
 
-        if avg_efficacy >= 4.0:
+        # ── Most common study environment ──
+        envs = [s.environment for s in all_sessions if s.environment]
+        if envs:
+            from collections import Counter
+            env_counts = Counter(envs)
+            top_env, top_count = env_counts.most_common(1)[0]
+            pct = round(top_count / len(envs) * 100)
+            dominant_env = top_env
             insights.append({
                 'type': 'positive',
-                'text': f"Your average session score is {avg_efficacy}/5. Feynman Technique blocks have been added for your highest-weight courses to match your strong performance."
-            })
-        elif avg_efficacy >= 2.5:
-            insights.append({
-                'type': 'neutral',
-                'text': f"Your average session score is {avg_efficacy}/5. Your schedule is balanced between active recall and review sessions."
-            })
-        elif avg_efficacy > 0:
-            insights.append({
-                'type': 'warning',
-                'text': f"Your average session score is {avg_efficacy}/5. Your schedule has shifted toward review techniques to consolidate before advancing."
+                'text': f"{pct}% of your sessions were completed in {top_env}."
             })
 
-        if user_context.get('burnout_risk') == 'High':
+        # ── Peak study day ──
+        days = [s.start_time.strftime('%A') for s in all_sessions if s.start_time]
+        if days:
+            from collections import Counter as DayCounter
+            day_counts = DayCounter(days)
+            top_day, _ = day_counts.most_common(1)[0]
             insights.append({
-                'type': 'warning',
-                'text': 'Two of your last three sessions were Low Energy. Your daily block count has been reduced to prevent burnout.'
+                'type': 'info',
+                'text': f"You complete more sessions on {top_day}s than any other day."
             })
-        else:
+
+        # ── Average session length ──
+        durations = [s.duration_minutes for s in all_sessions if s.duration_minutes and s.duration_minutes > 0]
+        if durations:
+            avg_dur = round(sum(durations) / len(durations))
+            insights.append({
+                'type': 'info',
+                'text': f"Your average focus session lasts {avg_dur} minutes."
+            })
+
+        # ── Most productive time of day ──
+        hours = [s.start_time.hour for s in all_sessions if s.start_time]
+        if hours:
+            avg_hour = round(sum(hours) / len(hours))
+            if avg_hour < 12:
+                window = 'in the morning'
+            elif avg_hour < 17:
+                window = 'in the afternoon'
+            else:
+                window = 'in the evening'
             insights.append({
                 'type': 'positive',
-                'text': 'No burnout risk detected. Your current block count and intensity are sustainable.'
+                'text': f"Your most productive sessions tend to happen {window}."
             })
 
-        peak_map = {
-            'morning': '8am \u2013 11am',
-            'afternoon': '1pm \u2013 4pm',
-            'evening': '6pm \u2013 9pm',
-            'night': '10pm \u2013 1am',
-            'early_morning': '4am \u2013 7am'
-        }
-        peak_label = peak_map.get(str(user.peak_time or '').lower(), 'your stated peak time')
-        insights.append({
-            'type': 'info',
-            'text': f"Your peak focus window is set to {peak_label}. Your highest-priority course is always scheduled in this slot."
-        })
+        # ── Best performing social setting ──
+        social_scores: dict[str, list[float]] = {}
+        for s in all_sessions:
+            if s.social_setting and s.success_score is not None:
+                social_scores.setdefault(s.social_setting, []).append(s.success_score)
+        if social_scores:
+            best_setting = max(social_scores, key=lambda k: sum(social_scores[k]) / len(social_scores[k]))
+            insights.append({
+                'type': 'positive',
+                'text': f"You perform best when studying {best_setting.lower()}."
+            })
+
+        # ── Completion rate ──
+        on_time = [s for s in all_sessions if s.completed_on_time is True]
+        if total_sessions > 0:
+            comp_pct = round(len(on_time) / total_sessions * 100)
+            insights.append({
+                'type': 'positive' if comp_pct >= 70 else 'warning',
+                'text': f"{comp_pct}% of your sessions were completed on time."
+            })
 
     return jsonify({
         'id': user.id,

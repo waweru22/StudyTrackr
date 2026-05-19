@@ -34,8 +34,11 @@ class User(db.Model):
     streak_count = db.Column(db.Integer, default=0)
     xp_points = db.Column(db.Integer, default=0)
     badge = db.Column(db.String(50), default="Novice")
-    
-    
+
+    timetable_uploaded = db.Column(
+        db.Boolean, default=False, nullable=False
+    )
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships

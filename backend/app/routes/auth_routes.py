@@ -1,6 +1,5 @@
 from flask import Blueprint, request, jsonify
 from app.services.auth_service import AuthService
-from app.services.inference_service import InferenceService
 from flask_jwt_extended import create_access_token
 from app.models.user import User
 from app import db, limiter
@@ -134,14 +133,10 @@ def verify_email():
         user.is_verified = True
         user.verification_token = None
         user.token_expires_at = None
-        
-        # 2. Generate schedule
-        course_ids = [c.id for c in user.courses]
-        sched_result = InferenceService.generate_week_schedule(user.id, selected_course_ids=course_ids)
-        if sched_result and "No courses" in str(sched_result):
-            print(f"Warning: {sched_result}")
-        
-        # 3. Remove the pending registration
+
+        # Schedule is generated after the student uploads their timetable.
+
+        # 2. Remove the pending registration
         db.session.delete(pending)
         db.session.commit()
         
@@ -279,7 +274,6 @@ def admin_login():
     }), 200
 
 @auth_bp.route('/onboard', methods=['POST'])
-@limiter.limit("10 per minute")
 def onboard():
     """Validate data, store in PendingRegistration, and send verification email.
     The real User is NOT created until the email link is clicked."""

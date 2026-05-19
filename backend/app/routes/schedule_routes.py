@@ -28,20 +28,30 @@ def get_schedule():
     LAGOS_TZ = timezone(timedelta(hours=1))
     today = datetime.now(LAGOS_TZ).date()
     
-    # 3. Inference-First: Regenerate if no future blocks or schedule is from a previous week
-    # Auto-generate only for brand new users (zero blocks ever).
-    # Returning users get their next schedule via the Adapt Schedule button,
-    # which uses AdaptationEngine. This prevents silent regeneration from
-    # bypassing adaptation logic.
-    has_any_blocks = ScheduleBlock.query.filter_by(user_id=user_id).count() > 0
+    from app.services.timetable_service import (
+        ensure_timetable_flag,
+        has_schedule_blocks,
+        user_has_timetable,
+    )
 
-    if not has_any_blocks:
-        from app.services.inference_service import InferenceService
-        InferenceService.generate_week_schedule(user_id)
-        
-    # Support viewing a different week (e.g. after adaptation)
     week_offset = int(request.args.get('week_offset', 0))
     view_date = today + timedelta(weeks=week_offset)
+    start_of_week = view_date - timedelta(days=view_date.weekday())
+    end_of_week = start_of_week + timedelta(days=6)
+
+    has_timetable = bool(user and ensure_timetable_flag(user_id))
+    schedule_ready = has_timetable and has_schedule_blocks(user_id)
+
+    if not user or not schedule_ready:
+        return jsonify({
+            "today_blocks": [],
+            "weekly_summary": {},
+            "viewing_week_offset": week_offset,
+            "week_start": start_of_week.isoformat(),
+            "week_end": end_of_week.isoformat(),
+            "timetable_uploaded": has_timetable,
+            "schedule_generated": False,
+        }), 200
 
     # Re-fetch blocks for the view date
     blocks = ScheduleBlock.query.filter_by(user_id=user_id, date=view_date).order_by(ScheduleBlock.start_time.asc()).all()
@@ -76,8 +86,8 @@ def get_schedule():
             "id": block.id,
             "course_code": block.course.code if block.course else "General",
             "course_title": block.course.name if block.course else "Personal Development",
-            "start_time": block.start_time.strftime("%I:%M%p").lower(),
-            "end_time": block.end_time.strftime("%I:%M%p").lower(),
+            "start_time": block.start_time.strftime("%H:%M"),
+            "end_time": block.end_time.strftime("%H:%M"),
             "block_type": block.block_type,
             "status": status,
             "technique_name": block.technique_name,
@@ -136,7 +146,34 @@ def get_schedule():
         "viewing_week_offset": week_offset,
         "week_start": start_of_week.isoformat(),
         "week_end": end_of_week.isoformat(),
+        "timetable_uploaded": True,
+        "schedule_generated": True,
     }), 200
+
+
+@schedule_bp.route('/generate-initial', methods=['POST'])
+@jwt_required()
+@limiter.limit("5 per hour")
+def generate_initial_schedule():
+    """Create the first weekly schedule after timetable upload (one-time)."""
+    user_id = int(get_jwt_identity())
+    from app.services.timetable_service import user_has_timetable, has_schedule_blocks
+    from app.services.inference_service import InferenceService
+
+    if not user_has_timetable(user_id):
+        return jsonify({
+            "error": "Upload your class timetable before generating a schedule."
+        }), 400
+
+    if has_schedule_blocks(user_id):
+        return jsonify({"message": "Schedule already exists"}), 200
+
+    result = InferenceService.generate_week_schedule(user_id)
+    if result and "No courses" in str(result):
+        return jsonify({"error": str(result)}), 400
+
+    return jsonify({"message": "Schedule generated"}), 201
+
 
 @schedule_bp.route('/<int:block_id>/start', methods=['POST'])
 @jwt_required()
@@ -198,6 +235,11 @@ def regenerate_schedule():
     Falls back to standard generation when no session data exists.
     """
     user_id = int(get_jwt_identity())
+    from app.services.timetable_service import user_has_timetable
+    if not user_has_timetable(user_id):
+        return jsonify({
+            "error": "Upload your class timetable before generating a schedule."
+        }), 400
 
     try:
         from app.services.inference_service_adaptation import AdaptationEngine
@@ -321,6 +363,11 @@ def adapt_schedule_now():
     from app.models.adaptation_log import AdaptationLog
 
     user_id = int(get_jwt_identity())
+    from app.services.timetable_service import user_has_timetable
+    if not user_has_timetable(user_id):
+        return jsonify({
+            "error": "Upload your class timetable before adapting your schedule."
+        }), 400
 
     # 1. Snapshot Week 1 blocks before adaptation
     week1_blocks = ScheduleBlock.query.filter_by(user_id=user_id, status='upcoming').all()
