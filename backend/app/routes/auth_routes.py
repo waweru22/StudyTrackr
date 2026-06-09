@@ -11,7 +11,8 @@ import re
 from datetime import datetime, timedelta
 
 # Compiled once, reused for all requests
-STUDENT_EMAIL_PATTERN = re.compile(r'^\d{8,10}@nileuniversity\.edu\.ng$')
+# Accepts student emails (digits@nileuniversity.edu.ng) AND admin emails (@nileuni.edu.ng)
+STUDENT_EMAIL_PATTERN = re.compile(r'^(\d{8,10}@nileuniversity\.edu\.ng|[^@]+@nileuni\.edu\.ng)$')
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -57,6 +58,36 @@ def login():
         }), 200
         
     return jsonify({"error": message}), 401
+
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from werkzeug.security import generate_password_hash
+
+@auth_bp.route('/change-password', methods=['PUT'])
+@limiter.limit("5 per minute")
+@jwt_required()
+def change_password():
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+        
+    data = request.get_json()
+    current_password = data.get('current_password')
+    new_password = data.get('new_password')
+    
+    if not current_password or not new_password:
+        return jsonify({"error": "Current password and new password are required."}), 400
+        
+    if not check_password_hash(user.hashed_password, current_password):
+        return jsonify({"error": "Incorrect current password."}), 400
+        
+    if len(new_password) < 8:
+        return jsonify({"error": "New password must be at least 8 characters long."}), 400
+        
+    user.hashed_password = generate_password_hash(new_password)
+    db.session.commit()
+    
+    return jsonify({"message": "Password updated successfully"}), 200
 
 @auth_bp.route('/request-otp', methods=['POST'])
 @auth_bp.route('/resend-otp', methods=['POST'])
@@ -216,7 +247,14 @@ def register_admin():
     data['role'] = 'admin'
     data['email'] = email
     data['level'] = data.get('level', 0)
-    data['username'] = data.get('username') or staff_id  # Use staff_id as username fallback
+
+    base = email.split('@')[0]
+    username = base
+    counter = 1
+    while User.query.filter_by(username=username).first():
+        username = f"{base}{counter}"
+        counter += 1
+    data['username'] = username
     
     user, message = AuthService.register_user(data)
     

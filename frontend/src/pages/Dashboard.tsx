@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import SessionModal from '../components/SessionModal';
 import { useUser } from '../context/UserContext';
 import { api } from '../api/client';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 import type { DashboardData, FeedItem } from '../types';
 
 
@@ -23,27 +24,32 @@ const Dashboard: React.FC = () => {
     const [loadingFocus, setLoadingFocus] = useState(false);
     const [recentNotifications, setRecentNotifications] = useState<{ id: number; title: string; type: string; created_at: string }[]>([]);
     const navigate = useNavigate();
+    const fetchData = async () => {
+        try {
+            const summary = await api.get<any>('/dashboard/summary');
+            setDashboardData(summary);
+            setRecentNotifications(summary.recent_notifications || []);
+            setFocusData(summary.focus_data || []);
+        } catch (error) {
+            console.error("Failed to fetch dashboard data", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const { requestPermissionAndRegister } = usePushNotifications(() => {
+        // Refetch dashboard data when a notification arrives
+        fetchData();
+    });
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const [dashboard, notifications] = await Promise.all([
-                    api.get<DashboardData>('/dashboard'),
-                    api.get<{ id: number; title: string; type: string; created_at: string }[]>('/notifications/').catch(() => []),
-                ]);
-                setDashboardData(dashboard);
-                setRecentNotifications(notifications.slice(0, 3));
-            } catch (error) {
-                console.error("Failed to fetch dashboard data", error);
-            } finally {
-                setLoading(false);
-            }
-        };
+        // Request push notifications when entering dashboard
+        requestPermissionAndRegister();
         fetchData();
     }, []);
 
-    // Fetch focus pulse data (P4)
     const fetchFocusData = async (days: number) => {
+        if (loading) return; // Skip initial fetch
         setLoadingFocus(true);
         try {
             const data = await api.get<{ name: string; focus: number }[]>(
@@ -58,7 +64,9 @@ const Dashboard: React.FC = () => {
     };
 
     useEffect(() => {
-        fetchFocusData(focusDays);
+        if (!loading) {
+            fetchFocusData(focusDays);
+        }
     }, [focusDays]);
 
     const getIconForType = (type: string) => {
@@ -107,12 +115,25 @@ const Dashboard: React.FC = () => {
         duration_minutes: dashboardData.next_session.duration_minutes,
     } : null;
 
+    if (loading) return (
+        <div className="flex h-screen bg-white font-sans text-gray-900">
+            <Sidebar />
+            <div className="flex-1 ml-64 py-8 pr-8 pl-[75px]">
+                <div className="animate-pulse space-y-4 p-6">
+                    <div className="h-8 bg-gray-200 rounded w-1/3"/>
+                    <div className="h-32 bg-gray-200 rounded"/>
+                    <div className="h-32 bg-gray-200 rounded"/>
+                </div>
+            </div>
+        </div>
+    );
+
     return (
         <div className="flex h-screen bg-white font-sans text-gray-900">
             <Sidebar />
 
             {/* Main Content Area */}
-            <div className="flex-1 ml-64 py-8 pr-8 pl-[75px] overflow-y-auto">
+            <div className="flex-1 md:py-8 py-16 pr-4 md:pr-8 pl-4 md:pl-[75px] overflow-y-auto w-full">
 
                 {/* Top Header */}
                 <header className="flex justify-between items-start mb-8 border-b border-gray-100 pb-4">

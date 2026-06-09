@@ -37,9 +37,11 @@ const LayoutContainer = styled.div`
 
 const MainContent = styled.main`
     flex: 1;
-    margin-left: 16rem;
     padding: 2.5rem 3rem;
     font-family: 'DM Sans', sans-serif;
+    @media (max-width: 768px) {
+        padding: 4rem 1rem 1rem 1rem;
+    }
 `;
 
 const TopBar = styled.div`
@@ -508,8 +510,13 @@ const Schedule: React.FC = () => {
         <LayoutContainer>
             <Sidebar />
             <MainContent>
-                <div className="flex items-center justify-center h-64 text-gray-400 animate-pulse">
-                    Loading your schedule...
+                <div className="animate-pulse space-y-4 p-6 mt-8">
+                    <div className="h-8 bg-gray-200 rounded w-1/4 mb-8"/>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div className="h-48 bg-gray-200 rounded-xl"/>
+                        <div className="h-48 bg-gray-200 rounded-xl"/>
+                        <div className="h-48 bg-gray-200 rounded-xl"/>
+                    </div>
                 </div>
             </MainContent>
         </LayoutContainer>

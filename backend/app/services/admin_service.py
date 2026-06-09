@@ -338,19 +338,37 @@ class AdminService:
         students = student_query.all()
 
         # 3. Create notifications for each student
-        notification_count = 0
-        for student in students:
-            NotificationService.create_notification(
-                student.id, title, message, type='admin_broadcast'
+        notifications = [
+            Notification(
+                user_id=student.id,
+                title=title,
+                message=message,
+                type='admin_broadcast',
+                is_read=False,
+                push_sent=False
             )
-            notification_count += 1
+            for student in students
+        ]
+        
+        db.session.bulk_save_objects(notifications)
+        notification_count = len(notifications)
 
-        # 4. Send emails (best effort)
-        for student in students:
-            try:
-                MailService.send_broadcast_email(student.email, title, message)
-            except Exception as e:
-                print(f"[Broadcast] Email failed for {student.email}: {e}")
+        # 4. Send emails asynchronously
+        from flask import current_app
+        from app.utils.background_tasks import create_task
+        
+        app = current_app._get_current_object()
+        student_emails = [s.email for s in students]
+        
+        def send_emails_bg(app_instance, emails, broadcast_title, broadcast_message):
+            with app_instance.app_context():
+                for email in emails:
+                    try:
+                        MailService.send_broadcast_email(email, broadcast_title, broadcast_message)
+                    except Exception as e:
+                        print(f"[Broadcast] Email failed for {email}: {e}")
+                        
+        create_task(send_emails_bg, app, student_emails, title, message)
 
         db.session.commit()
         return broadcast, notification_count

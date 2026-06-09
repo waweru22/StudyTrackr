@@ -165,7 +165,22 @@ const Profile: React.FC = () => {
             .catch(() => setAdaptationLogs([]));
     }, []);
 
-    if (loading) return <div className="flex h-screen items-center justify-center text-gray-400">Loading...</div>;
+    if (loading) return (
+        <div className="flex h-screen bg-white font-sans text-gray-900">
+            <Sidebar />
+            <div className="flex-1 md:py-8 py-16 pr-4 md:pr-8 pl-4 md:pl-[75px] overflow-y-auto w-full">
+                <div className="animate-pulse space-y-4 p-6">
+                    <div className="h-8 bg-gray-200 rounded w-1/4 mb-8"/>
+                    <div className="h-48 bg-gray-200 rounded-xl mb-6"/>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div className="h-32 bg-gray-200 rounded-xl"/>
+                        <div className="h-32 bg-gray-200 rounded-xl"/>
+                        <div className="h-32 bg-gray-200 rounded-xl"/>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
     if (!profile) return <div className="flex h-screen items-center justify-center text-gray-400">User not found.</div>;
 
     const visibleCourses = showAllCourses ? courses : courses.slice(0, 6);
@@ -174,7 +189,7 @@ const Profile: React.FC = () => {
         <div className="flex h-screen bg-white font-sans text-gray-900">
             <Sidebar />
 
-            <div className="flex-1 ml-64 py-8 pr-8 pl-[75px] overflow-y-auto">
+            <div className="flex-1 md:py-8 py-16 pr-4 md:pr-8 pl-4 md:pl-[75px] overflow-y-auto w-full">
                 <header className="mb-10">
                     <h1 className="text-2xl font-bold text-gray-900">Student Profile</h1>
                 </header>

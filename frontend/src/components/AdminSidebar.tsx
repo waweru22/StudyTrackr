@@ -12,7 +12,6 @@ const AdminSidebar: React.FC = () => {
     const mainItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
         { icon: BookOpen, label: 'Courses', path: '/admin/courses' },
-        { icon: ShieldCheck, label: 'Verification', path: '/admin/verification' },
     ];
 
     const analyticsItems = [

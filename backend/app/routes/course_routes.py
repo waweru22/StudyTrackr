@@ -1,10 +1,12 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app.models.course import Course
+from app import cache
 
 course_bp = Blueprint('course', __name__)
 
 @course_bp.route('/filter', methods=['GET'])
+@cache.cached(timeout=300, query_string=True)
 def get_courses():
     level_filter = request.args.get('level')
     semester_filter = request.args.get('semester')
@@ -66,6 +68,7 @@ def get_my_courses():
 
 
 @course_bp.route('/all', methods=['GET'])
+@cache.cached(timeout=300)
 def get_all_courses():
     # Global list ordered by level then code
     courses = Course.query.filter_by(is_active=True).order_by(Course.level.asc(), Course.code.asc()).all()
@@ -75,6 +78,8 @@ def get_all_courses():
         'code': c.code,
         'name': c.name,
         'level': c.level,
+        'semester': c.semester,
+        'credits': c.credits,
         'weight': c.weight
     } for c in courses]), 200
 

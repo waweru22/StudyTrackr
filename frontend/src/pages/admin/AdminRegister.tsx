@@ -13,7 +13,7 @@ const AdminRegister: React.FC = () => {
     // Register fields
     const [email, setEmail] = useState('');
     const [staffId, setStaffId] = useState('');
-    const [username, setUsername] = useState('');
+
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [adminKey, setAdminKey] = useState('');
@@ -38,7 +38,6 @@ const AdminRegister: React.FC = () => {
                 confirm_password: confirmPassword,
                 staff_id: staffId,
                 admin_key: adminKey,
-                username: username || staffId,
             });
             if (res.access_token) {
                 sessionStorage.setItem('token', res.access_token);
@@ -112,18 +111,6 @@ const AdminRegister: React.FC = () => {
                                 onChange={(e) => setStaffId(e.target.value)}
                                 required
                                 placeholder="e.g. STF-2024-001"
-                                className="w-full px-4 py-3 rounded-xl bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 text-sm transition-all"
-                            />
-                        </div>
-
-                        {/* Username */}
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Username</label>
-                            <input
-                                type="text"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                placeholder="Display name (optional, defaults to Staff ID)"
                                 className="w-full px-4 py-3 rounded-xl bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 text-sm transition-all"
                             />
                         </div>

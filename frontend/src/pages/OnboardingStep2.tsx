@@ -56,17 +56,8 @@ const OnboardingStep2: React.FC = () => {
         const fetchAll = async () => {
             setLoadingCarryover(true);
             try {
-                const semInt = selectedSemester === 'harmattan' ? 1 : 2;
-                const levels = [100, 200, 300, 400, 500];
-                const results = await Promise.all(
-                    levels.map(lvl =>
-                        api.get<Course[]>(`/courses/filter?level=${lvl}&semester=${semInt}`)
-                            .catch(() => [] as Course[])
-                    )
-                );
-                const map = new Map<number, Course>();
-                results.flat().forEach(c => map.set(c.id, c));
-                setAllCourses(Array.from(map.values()));
+                const results = await api.get<Course[]>('/courses/all');
+                setAllCourses(results);
             } catch { /* silent */ } finally {
                 setLoadingCarryover(false);
             }

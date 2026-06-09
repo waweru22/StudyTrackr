@@ -170,7 +170,7 @@ const StudyTips: React.FC = () => {
         <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
             <Sidebar />
 
-            <main className="flex-1 ml-64 py-8 pr-8 pl-[75px] overflow-y-auto">
+            <main className="flex-1 md:py-8 py-16 pr-4 md:pr-8 pl-4 md:pl-[75px] overflow-y-auto w-full">
                 <header className="mb-10">
                     <div className="inline-flex items-center gap-3 rounded-full bg-white px-4 py-2 shadow-sm border border-slate-200">
                         <Lightbulb className="text-amber-500" size={20} />

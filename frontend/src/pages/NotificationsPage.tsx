@@ -99,7 +99,7 @@ const NotificationsPage: React.FC = () => {
     if (loading) return (
         <div className="flex h-screen bg-white font-sans text-gray-900">
             <Sidebar />
-            <div className="flex-1 ml-64 flex items-center justify-center">
+            <div className="flex-1 flex items-center justify-center w-full">
                 <p className="text-gray-400">Loading notifications...</p>
             </div>
         </div>
@@ -108,7 +108,7 @@ const NotificationsPage: React.FC = () => {
     return (
         <div className="flex h-screen bg-white font-sans text-gray-900">
             <Sidebar />
-            <div className="flex-1 ml-64 py-8 pr-8 pl-[75px] overflow-y-auto">
+            <div className="flex-1 md:py-8 py-16 pr-4 md:pr-8 pl-4 md:pl-[75px] overflow-y-auto w-full">
                 <div className="flex items-center justify-between mb-8">
                     <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
                     {hasUnread && (

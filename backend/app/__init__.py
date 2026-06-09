@@ -6,6 +6,7 @@ from flask_cors import CORS
 from flask_mail import Mail
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_caching import Cache
 from config import Config
 
 db = SQLAlchemy()
@@ -14,9 +15,16 @@ jwt = JWTManager()
 mail = Mail()
 limiter = Limiter(
     key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
+    default_limits=["1000 per day", "500 per hour"],
     storage_uri="memory://"
 )
+
+from flask import request
+@limiter.request_filter
+def exempt_options():
+    return request.method == 'OPTIONS'
+
+cache = Cache(config={'CACHE_TYPE': 'SimpleCache', 'CACHE_DEFAULT_TIMEOUT': 300})
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -27,6 +35,7 @@ def create_app(config_class=Config):
     jwt.init_app(app)
     mail.init_app(app)
     limiter.init_app(app)
+    cache.init_app(app)
 
     # === TEMPORARY MAIL CONFIG DEBUG (remove after diagnosis) ===
     print("=== MAIL CONFIG DEBUG ===")

@@ -2,9 +2,32 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.services.notification_service import NotificationService
 from app.services.fcm_service import FCMService
+from app.models.notification_trigger import NotificationTrigger
+from app import db
 
 notification_bp = Blueprint("notifications", __name__)
 
+# ── Notification Triggers ─────────────────────────────────────────────
+
+@notification_bp.route("/triggers", methods=["GET"])
+@jwt_required()
+def get_notification_triggers():
+    triggers = NotificationTrigger.query.all()
+    return jsonify([t.to_dict() for t in triggers])
+
+@notification_bp.route("/triggers/<trigger_name>", methods=["PATCH"])
+@jwt_required()
+def update_notification_trigger(trigger_name):
+    trigger = NotificationTrigger.query.filter_by(trigger_name=trigger_name).first()
+    if not trigger:
+        return jsonify({"error": "Trigger not found"}), 404
+        
+    data = request.get_json()
+    if 'is_active' in data:
+        trigger.is_active = data['is_active']
+        db.session.commit()
+        
+    return jsonify({"message": "Trigger updated successfully", "trigger": trigger.to_dict()})
 
 # ── Notification Endpoints ────────────────────────────────────────────
 

@@ -196,6 +196,34 @@ def update_user_profile():
         'level': user.level
     }}), 200
 
+@user_bp.route('/update-preferences', methods=['PUT'])
+@jwt_required()
+def update_user_preferences():
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+        
+    from flask import request
+    data = request.get_json()
+    
+    if 'peak_time' in data:
+        user.peak_time = data['peak_time']
+    if 'focus_threshold' in data:
+        user.focus_threshold = data['focus_threshold']
+    if 'environment_pref' in data:
+        user.environment_pref = data['environment_pref']
+    if 'preferred_environment_v2' in data:
+        user.preferred_environment_v2 = data['preferred_environment_v2']
+    if 'learning_style' in data:
+        user.learning_style = data['learning_style']
+        
+    from app import db
+    db.session.commit()
+    
+    return jsonify({"message": "Preferences updated successfully"}), 200
+
 @user_bp.route('/courses', methods=['GET'])
 @jwt_required()
 def get_user_courses():
@@ -217,7 +245,8 @@ def get_user_courses():
 def get_session_history():
     user_id = int(get_jwt_identity())
 
-    sessions = StudySession.query.filter(
+    from sqlalchemy.orm import joinedload
+    sessions = StudySession.query.options(joinedload(StudySession.course)).filter(
         StudySession.user_id == user_id,
         StudySession.end_time != None
     ).order_by(StudySession.start_time.desc()).limit(10).all()

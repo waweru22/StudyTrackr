@@ -2,11 +2,13 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.course import StudyKnowledge
 from app.models.user import User
+from app import cache
 
 knowledge_bp = Blueprint('knowledge', __name__)
 
 @knowledge_bp.route('/', methods=['GET'])
 @jwt_required()
+@cache.cached(timeout=300)
 def get_knowledge():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)

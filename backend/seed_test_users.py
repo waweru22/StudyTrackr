@@ -36,6 +36,10 @@ ITERATIVE PROCESS FOR AMEER (after running this script):
 
 import sys
 import os
+
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from datetime import datetime, timedelta, date
@@ -73,6 +77,9 @@ ERNEST_COURSES = ["SEN306", "CSC308", "SEN304", "SEN322", "GST312"]
 # Level 200, Semester 2 — for Ameer
 AMEER_COURSES = ["MTH202", "IFT212", "COS202", "GST212", "ENT212"]
 
+# Level 300, Semester 2 — for fresh test user (reuse Ernest's courses)
+FRESH_COURSES = ["SEN306", "CSC308", "SEN304"]
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
@@ -86,6 +93,36 @@ def clean_user(email):
         try:
             from app.models.adaptation_log import AdaptationLog
             AdaptationLog.query.filter_by(user_id=user.id).delete()
+        except Exception:
+            pass
+        try:
+            from app.models.course import SavedResource
+            SavedResource.query.filter_by(user_id=user.id).delete()
+        except Exception:
+            pass
+        try:
+            from app.models.note import Note
+            Note.query.filter_by(user_id=user.id).delete()
+        except Exception:
+            pass
+        try:
+            from app.models.system_alert import SystemAlert
+            SystemAlert.query.filter_by(user_id=user.id).delete()
+        except Exception:
+            pass
+        try:
+            from app.models.notification import Notification
+            Notification.query.filter_by(user_id=user.id).delete()
+        except Exception:
+            pass
+        try:
+            from app.models.fcm_token import FCMToken
+            FCMToken.query.filter_by(user_id=user.id).delete()
+        except Exception:
+            pass
+        try:
+            from app.models.timetable_entry import TimetableEntry
+            TimetableEntry.query.filter_by(user_id=user.id).delete()
         except Exception:
             pass
         try:
@@ -222,6 +259,7 @@ def seed_ernest():
         streak_count             = 0,
         role                     = "student",
         is_verified              = True,
+        timetable_uploaded       = True,
     )
     db.session.add(user)
     db.session.commit()
@@ -342,6 +380,7 @@ def seed_ameer():
         streak_count             = 0,
         role                     = "student",
         is_verified              = True,
+        timetable_uploaded       = True,
     )
     db.session.add(user)
     db.session.commit()
@@ -419,19 +458,91 @@ def seed_ameer():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# FRESH TEST USER  (no session history — verifies 'upcoming' block logic)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def seed_fresh_user():
+    """
+    Creates a brand-new student with a schedule for the CURRENT week.
+    No sessions are seeded, so every block stays 'upcoming'.
+    Use this to verify that a newly-registered user never sees blocks as 'completed'.
+
+    Credentials:
+        email:    20230001@nileuniversity.edu.ng
+        password: 1234567
+    """
+    EMAIL = "20230001@nileuniversity.edu.ng"
+    print("\n  → Seeding fresh test user (freshstart_)...")
+    clean_user(EMAIL)
+
+    user = User(
+        email                    = EMAIL,
+        username                 = "freshstart_",
+        hashed_password          = generate_password_hash(DEMO_PASSWORD),
+        level                    = 300,
+        base_template            = "deep_work_specialist",
+        peak_time                = "morning",
+        focus_threshold          = 90,
+        learning_style           = "read_write",
+        preferred_environment_v2 = "silent",
+        study_mode               = "solo",
+        daily_cognitive_budget   = 2,
+        xp_points                = 0,
+        badge                    = "Novice",
+        streak_count             = 0,
+        role                     = "student",
+        is_verified              = True,
+        timetable_uploaded       = True,   # skip timetable upload prompt
+    )
+    db.session.add(user)
+    db.session.commit()
+
+    enroll_courses(user, FRESH_COURSES)
+
+    # Generate schedule for THIS week so blocks are in the future → 'upcoming'
+    print("    Generating schedule for current week...")
+    InferenceService.generate_week_schedule(user.id, week_start_override=THIS_MONDAY)
+
+    # Do NOT call seed_sessions() — blocks must remain 'upcoming'
+    upcoming = ScheduleBlock.query.filter_by(user_id=user.id, status='upcoming').all()
+    print(f"    Blocks generated: {len(upcoming)} (all 'upcoming' — no sessions seeded)")
+    print("    ✓ Fresh user ready")
+    print(f"      email: {EMAIL} | password: {DEMO_PASSWORD}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ENTRYPOINT
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="StudyTrackr demo seeder")
+    parser.add_argument("--demo",  action="store_true", help="Seed Ernest and Ameer (demo users)")
+    parser.add_argument("--fresh", action="store_true", help="Seed fresh test user only (no session history)")
+    args = parser.parse_args()
+
+    # Default: run everything if no flag given
+    run_demo  = args.demo  or (not args.demo and not args.fresh)
+    run_fresh = args.fresh or (not args.demo and not args.fresh)
+
     print("StudyTrackr Demo Seeder")
     print("=" * 50)
+
     with app.app_context():
-        seed_ernest()
-        seed_ameer()
+        if run_demo:
+            seed_ernest()
+            seed_ameer()
+        if run_fresh:
+            seed_fresh_user()
+
     print("\n" + "=" * 50)
     print("Done.\n")
-    print("  Ernest | 20221192@nileuniversity.edu.ng | 1234567")
-    print("  → Level 300 | Sem 2 | Deep Work | SEN306 struggling, CSC308 thriving\n")
-    print("  Ameer  | 20220088@nileuniversity.edu.ng | 1234567")
-    print("  → Level 200 | Sem 2 | Pomodoro  | COS202 struggling, MTH202 thriving\n")
-    print("  Next for Ameer: adapt → bring Week 2 schedule to Claude → seed → repeat")
+    if run_demo:
+        print("  Ernest | 20221192@nileuniversity.edu.ng | 1234567")
+        print("  → Level 300 | Sem 2 | Deep Work | SEN306 struggling, CSC308 thriving\n")
+        print("  Ameer  | 20220088@nileuniversity.edu.ng | 1234567")
+        print("  → Level 200 | Sem 2 | Pomodoro  | COS202 struggling, MTH202 thriving\n")
+        print("  Next for Ameer: adapt → bring Week 2 schedule to Claude → seed → repeat")
+    if run_fresh:
+        print("  freshstart_ | 20230001@nileuniversity.edu.ng | 1234567")
+        print("  → Level 300 | Current week | All blocks 'upcoming' | No session history")

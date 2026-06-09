@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import AdminSidebar from '../../components/AdminSidebar';
-import { adminDashboard } from '../../api/adminService';
+import { adminDashboard, adminAnalytics } from '../../api/adminService';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Users, BookCheck, Target, Clock, ShieldAlert, TrendingUp } from 'lucide-react';
+import { Users, BookCheck, Target, Clock, ShieldAlert, TrendingUp, Trophy } from 'lucide-react';
 import type { AdminDashboardData } from '../../types';
 
 const CHART_COLORS = ['#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef'];
@@ -11,6 +11,11 @@ const AdminDashboard: React.FC = () => {
     const [data, setData] = useState<AdminDashboardData | null>(null);
     const [weeks, setWeeks] = useState(1);
     const [loading, setLoading] = useState(true);
+
+    const [performanceData, setPerformanceData] = useState<any[]>([]);
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [loadingPerformance, setLoadingPerformance] = useState(false);
 
     const fetchData = async () => {
         setLoading(true);
@@ -24,7 +29,21 @@ const AdminDashboard: React.FC = () => {
         }
     };
 
+    const fetchPerformance = async () => {
+        setLoadingPerformance(true);
+        try {
+            const res = await adminAnalytics.studentPerformance(page);
+            setPerformanceData(res.students);
+            setTotalPages(res.total_pages);
+        } catch (e) {
+            console.error('Performance fetch failed', e);
+        } finally {
+            setLoadingPerformance(false);
+        }
+    };
+
     useEffect(() => { fetchData(); }, [weeks]);
+    useEffect(() => { fetchPerformance(); }, [page]);
 
     const statCards = data ? [
         { label: 'Total Students', value: data.total_students, icon: Users, color: 'bg-blue-500/10 text-blue-400', border: 'border-blue-500/20' },
@@ -122,6 +141,83 @@ const AdminDashboard: React.FC = () => {
                                     <div className="h-[250px] flex items-center justify-center text-sm text-slate-500">No course session data yet</div>
                                 )}
                             </div>
+                        </div>
+
+                        {/* Student Performance Table */}
+                        <div className="mt-8 bg-slate-800/60 backdrop-blur rounded-2xl p-6 border border-slate-700/30">
+                            <div className="flex items-center space-x-2 mb-6">
+                                <Trophy size={18} className="text-yellow-400" />
+                                <h3 className="text-sm font-bold text-white">Anonymous Student Leaderboard</h3>
+                            </div>
+                            
+                            {loadingPerformance ? (
+                                <div className="flex items-center justify-center h-40">
+                                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400"></div>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left text-sm text-slate-300">
+                                            <thead className="text-xs uppercase bg-slate-700/50 text-slate-400">
+                                                <tr>
+                                                    <th className="px-4 py-3 rounded-tl-lg">#</th>
+                                                    <th className="px-4 py-3">Sessions</th>
+                                                    <th className="px-4 py-3">Avg Score</th>
+                                                    <th className="px-4 py-3">XP</th>
+                                                    <th className="px-4 py-3">Streak</th>
+                                                    <th className="px-4 py-3">Level</th>
+                                                    <th className="px-4 py-3">Template</th>
+                                                    <th className="px-4 py-3 rounded-tr-lg">Badge</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {performanceData.map((student, idx) => (
+                                                    <tr key={student.serial} className="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors">
+                                                        <td className="px-4 py-3 font-mono font-bold text-slate-100">{student.serial}</td>
+                                                        <td className="px-4 py-3">{student.session_count}</td>
+                                                        <td className="px-4 py-3">
+                                                            <span className={`px-2 py-1 rounded text-xs font-semibold ${student.avg_score >= 4 ? 'bg-green-500/10 text-green-400' : student.avg_score >= 2.5 ? 'bg-yellow-500/10 text-yellow-400' : 'bg-red-500/10 text-red-400'}`}>
+                                                                {student.avg_score.toFixed(2)}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 font-semibold text-purple-400">{student.xp_points}</td>
+                                                        <td className="px-4 py-3">{student.streak} {student.streak === 1 ? 'day' : 'days'}</td>
+                                                        <td className="px-4 py-3">{student.level}</td>
+                                                        <td className="px-4 py-3 text-xs uppercase tracking-wide">{student.template}</td>
+                                                        <td className="px-4 py-3 text-xs font-semibold text-yellow-500">{student.badge}</td>
+                                                    </tr>
+                                                ))}
+                                                {performanceData.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan={8} className="px-4 py-8 text-center text-slate-500">No student data available.</td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    
+                                    {/* Pagination */}
+                                    {totalPages > 1 && (
+                                        <div className="flex justify-between items-center mt-6 text-sm text-slate-400">
+                                            <button 
+                                                disabled={page === 1}
+                                                onClick={() => setPage(p => p - 1)}
+                                                className="px-4 py-2 bg-slate-700/50 rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                                &larr; Previous
+                                            </button>
+                                            <span className="font-medium text-slate-300">Page {page} of {totalPages}</span>
+                                            <button 
+                                                disabled={page === totalPages}
+                                                onClick={() => setPage(p => p + 1)}
+                                                className="px-4 py-2 bg-slate-700/50 rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                                Next &rarr;
+                                            </button>
+                                        </div>
+                                    )}
+                                </>
+                            )}
                         </div>
                     </>
                 )}

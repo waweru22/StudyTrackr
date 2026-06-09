@@ -25,8 +25,10 @@ def get_dashboard():
     today = now_lagos.date()
     current_time = now_lagos.time()
     
+    from sqlalchemy.orm import joinedload
+    
     # 1. Check for upcoming sessions LATER TODAY
-    next_session = ScheduleBlock.query.filter_by(user_id=user_id, date=today)\
+    next_session = ScheduleBlock.query.options(joinedload(ScheduleBlock.course)).filter_by(user_id=user_id, date=today)\
         .filter(
             ScheduleBlock.start_time > current_time,
             ScheduleBlock.status == 'upcoming'
@@ -36,7 +38,7 @@ def get_dashboard():
         
     # 2. If none today, check FUTURE DATES
     if not next_session:
-        next_session = ScheduleBlock.query.filter(
+        next_session = ScheduleBlock.query.options(joinedload(ScheduleBlock.course)).filter(
             ScheduleBlock.user_id == user_id, 
             ScheduleBlock.date > today,
             ScheduleBlock.status == 'upcoming'
@@ -153,3 +155,151 @@ def get_focus_pulse():
             1
         ))
     } for s in sessions]), 200
+
+@dashboard_bp.route('/summary', methods=['GET'])
+@jwt_required()
+def get_dashboard_summary():
+    """Aggregated endpoint for the dashboard to reduce HTTP requests."""
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    # Real-time Trigger: Check for missed sessions
+    from app.services.schedule_service import ScheduleService
+    from app.services.gamification_service import GamificationService
+    ScheduleService.check_missed_sessions(user_id)
+    GamificationService.calculate_streak(user_id)
+    
+    # Next session with joinedload
+    from sqlalchemy.orm import joinedload
+    from datetime import timezone, timedelta
+    LAGOS_TZ = timezone(timedelta(hours=1))
+    now_lagos = datetime.now(LAGOS_TZ)
+    today = now_lagos.date()
+    current_time = now_lagos.time()
+    
+    next_session = ScheduleBlock.query.options(joinedload(ScheduleBlock.course)).filter_by(user_id=user_id, date=today)\
+        .filter(
+            ScheduleBlock.start_time > current_time,
+            ScheduleBlock.status == 'upcoming'
+        )\
+        .order_by(ScheduleBlock.start_time.asc())\
+        .first()
+        
+    if not next_session:
+        next_session = ScheduleBlock.query.options(joinedload(ScheduleBlock.course)).filter(
+            ScheduleBlock.user_id == user_id, 
+            ScheduleBlock.date > today,
+            ScheduleBlock.status == 'upcoming'
+        ).order_by(ScheduleBlock.date.asc(), ScheduleBlock.start_time.asc()).first()
+        
+    from app.services.timetable_service import ensure_timetable_flag, has_schedule_blocks
+    has_timetable = ensure_timetable_flag(user_id)
+    schedule_ready = has_schedule_blocks(user_id)
+
+    if not user.is_verified or not schedule_ready:
+        next_session = None
+    
+    # Unified Feed
+    from app.models.broadcast import Broadcast
+    broadcasts = Broadcast.query.filter(
+        (Broadcast.target_level == user.level) | (Broadcast.target_level == 0)
+    ).order_by(Broadcast.timestamp.desc()).limit(5).all()
+    
+    from app.models.notification import Notification
+    notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).limit(5).all()
+    
+    feed_items = []
+    for b in broadcasts:
+        item = b.to_dict()
+        item['type'] = 'broadcast'
+        feed_items.append(item)
+        
+    for n in notifications:
+        feed_items.append({
+            'id': n.id,
+            'title': n.title,
+            'message': n.message,
+            'type': n.type,
+            'created_at': n.created_at.isoformat() if n.created_at else '',
+            'timestamp': n.created_at.isoformat() if n.created_at else '',
+            'is_read': n.is_read,
+        })
+        
+    feed_items.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+    feed = feed_items[:5]
+    recent_notifications = [n for n in feed_items if n.get('type') != 'broadcast'][:3]
+    
+    # Featured Tip
+    from app.services.study_tips_service import StudyTipsService
+    featured_tip = StudyTipsService.get_featured_tip()
+    
+    # Daily Quote
+    quotes = [
+        {"text": "The secret of getting ahead is getting started.", "author": "Mark Twain"},
+        {"text": "It always seems impossible until it's done.", "author": "Nelson Mandela"},
+        {"text": "Success is not final, failure is not fatal: it is the courage to continue that counts.", "author": "Winston Churchill"},
+        {"text": "The expert in anything was once a beginner.", "author": "Helen Hayes"},
+        {"text": "Don't watch the clock; do what it does. Keep going.", "author": "Sam Levenson"},
+        {"text": "Believe you can and you're halfway there.", "author": "Theodore Roosevelt"},
+        {"text": "You don't have to be great to start, but you have to start to be great.", "author": "Zig Ziglar"},
+        {"text": "The beautiful thing about learning is nobody can take it away from you.", "author": "B.B. King"},
+        {"text": "An investment in knowledge pays the best interest.", "author": "Benjamin Franklin"},
+        {"text": "Education is the most powerful weapon you can use to change the world.", "author": "Nelson Mandela"},
+        {"text": "The more that you read, the more things you will know.", "author": "Dr. Seuss"},
+        {"text": "Live as if you were to die tomorrow. Learn as if you were to live forever.", "author": "Mahatma Gandhi"},
+        {"text": "The mind is not a vessel to be filled but a fire to be kindled.", "author": "Plutarch"},
+        {"text": "Perseverance is not a long race; it is many short races one after the other.", "author": "Walter Elliot"},
+        {"text": "Deep work is the ability to focus without distraction on a cognitively demanding task.", "author": "Cal Newport"},
+    ]
+    from datetime import date
+    day_index = date.today().timetuple().tm_yday % len(quotes)
+    daily_quote = quotes[day_index]
+    
+    # Focus Pulse (last 7 days by default)
+    since = datetime.utcnow() - timedelta(days=7)
+    sessions = StudySession.query.filter(
+        StudySession.user_id == user_id,
+        StudySession.start_time >= since,
+        StudySession.end_time != None
+    ).order_by(StudySession.start_time.asc()).all()
+
+    focus_data = []
+    if sessions:
+        focus_data = [{
+            'name': s.start_time.strftime('%a'),
+            'focus': max(0, round(
+                ((s.success_score or 0) / 5.0 * 100) - ((s.distraction_count or 0) * 10),
+                1
+            ))
+        } for s in sessions]
+    
+    return jsonify({
+        "user": {
+            "username": user.username,
+            "xp_points": user.xp_points,
+            "streak_count": user.streak_count,
+            "badge": user.badge
+        },
+        "streak": user.streak_count,
+        "badge": user.badge,
+        "xp": user.xp_points,
+        "timetable_uploaded": has_timetable,
+        "schedule_ready": schedule_ready,
+        "next_session": {
+            "id": next_session.id if next_session else None,
+            "course": next_session.course.code if next_session and next_session.course else "None",
+            "course_title": next_session.course.name if next_session and next_session.course else "No Upcoming Session",
+            "time": next_session.start_time.strftime("%I:%M %p").lower() if next_session else "N/A",
+            "technique": next_session.technique_name if next_session else "General Study",
+            "technique_details": next_session.technique_details if next_session else "",
+            "duration_minutes": int((datetime.combine(next_session.date, next_session.end_time) - datetime.combine(next_session.date, next_session.start_time)).total_seconds() / 60) if next_session else 0,
+            "status": next_session.status if next_session else "none"
+        },
+        "quote": daily_quote,
+        "feed": feed,
+        "recent_notifications": recent_notifications,
+        "featured_tip": featured_tip,
+        "focus_data": focus_data,
+        "adaptation_available": True
+    }), 200
+

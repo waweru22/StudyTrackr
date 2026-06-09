@@ -31,9 +31,11 @@ const LayoutContainer = styled.div`
 
 const MainContent = styled.main`
     flex: 1;
-    margin-left: 16rem;
     padding: 2.5rem 3rem;
     font-family: 'DM Sans', sans-serif;
+    @media (max-width: 768px) {
+        padding: 4rem 1rem 1rem 1rem;
+    }
 `;
 
 const TopBar = styled.div`

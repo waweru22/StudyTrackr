@@ -3,6 +3,8 @@ from app.utils.decorators import admin_required
 from app.services.admin_service import AdminService
 from flask_jwt_extended import get_jwt_identity
 from app.models.user import User
+from app.models.session import StudySession
+import math
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -113,6 +115,49 @@ def get_course_analytics():
 def get_technique_analytics():
     data = AdminService.get_technique_effectiveness()
     return jsonify(data), 200
+
+
+@admin_bp.route('/student-performance', methods=['GET'])
+@admin_required()
+def get_student_performance():
+    students = User.query.filter_by(role='student').order_by(User.id).all()
+    
+    result = []
+    for i, user in enumerate(students):
+        sessions = StudySession.query.filter_by(
+            user_id=user.id
+        ).all()
+        
+        avg_score = sum(s.success_score for s in sessions 
+                       if s.success_score) / len(sessions) \
+                   if sessions else 0
+        
+        result.append({
+            "serial": str(i + 1).zfill(3),
+            "session_count": len(sessions),
+            "avg_score": round(avg_score, 2),
+            "xp_points": user.xp_points,
+            "streak": user.streak_count,
+            "level": user.level,
+            "template": user.base_template,
+            "badge": user.badge
+        })
+    
+    # Sort by avg_score descending (best at top)
+    result.sort(key=lambda x: x['avg_score'], reverse=True)
+    
+    # Pagination: 30 per page
+    page = request.args.get('page', 1, type=int)
+    per_page = 30
+    start = (page - 1) * per_page
+    end = start + per_page
+    
+    return jsonify({
+        "students": result[start:end],
+        "total": len(result),
+        "page": page,
+        "total_pages": math.ceil(len(result) / per_page)
+    }), 200
 
 
 # Legacy focus analytics endpoint (backward compat)

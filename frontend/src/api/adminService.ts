@@ -11,7 +11,7 @@ import type {
 // ─── Auth ───────────────────────────────────────────────────────
 
 export const adminAuth = {
-    register: (data: { email: string; password: string; confirm_password: string; staff_id: string; admin_key: string; username?: string }) =>
+    register: (data: { email: string; password: string; confirm_password: string; staff_id: string; admin_key: string }) =>
         api.post<{ access_token: string; user: any; message: string }>('/auth/admin/register', data),
 
     login: (data: { email: string; password: string }) =>
@@ -64,6 +64,13 @@ export const adminAnalytics = {
     },
 
     techniques: () => api.get<TechniqueItem[]>('/admin/analytics/techniques'),
+
+    studentPerformance: (page = 1) => api.get<{
+        students: any[];
+        total: number;
+        page: number;
+        total_pages: number;
+    }>(`/admin/student-performance?page=${page}`),
 };
 
 // ─── Broadcast ──────────────────────────────────────────────────

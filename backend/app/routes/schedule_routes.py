@@ -53,8 +53,10 @@ def get_schedule():
             "schedule_generated": False,
         }), 200
 
+    from sqlalchemy.orm import joinedload
+    
     # Re-fetch blocks for the view date
-    blocks = ScheduleBlock.query.filter_by(user_id=user_id, date=view_date).order_by(ScheduleBlock.start_time.asc()).all()
+    blocks = ScheduleBlock.query.options(joinedload(ScheduleBlock.course)).filter_by(user_id=user_id, date=view_date).order_by(ScheduleBlock.start_time.asc()).all()
         
     # 4. Build Response with Status & Themes
     from app.models.session import StudySession
@@ -117,7 +119,7 @@ def get_schedule():
     start_of_week = view_date - timedelta(days=view_date.weekday()) # Monday
     end_of_week = start_of_week + timedelta(days=6) # Sunday
     
-    week_blocks = ScheduleBlock.query.filter(
+    week_blocks = ScheduleBlock.query.options(joinedload(ScheduleBlock.course)).filter(
         ScheduleBlock.user_id == user_id,
         ScheduleBlock.date >= start_of_week,
         ScheduleBlock.date <= end_of_week
@@ -267,7 +269,8 @@ def debug_all_schedules():
     Debug Endpoint: Retrieve all schedule blocks to verify persistence.
     Public access (Dev use only).
     """
-    blocks = ScheduleBlock.query.order_by(ScheduleBlock.date.asc(), ScheduleBlock.start_time.asc()).all()
+    from sqlalchemy.orm import joinedload
+    blocks = ScheduleBlock.query.options(joinedload(ScheduleBlock.course)).order_by(ScheduleBlock.date.asc(), ScheduleBlock.start_time.asc()).all()
     
     results = []
     for b in blocks:
@@ -369,8 +372,9 @@ def adapt_schedule_now():
             "error": "Upload your class timetable before adapting your schedule."
         }), 400
 
+    from sqlalchemy.orm import joinedload
     # 1. Snapshot Week 1 blocks before adaptation
-    week1_blocks = ScheduleBlock.query.filter_by(user_id=user_id, status='upcoming').all()
+    week1_blocks = ScheduleBlock.query.options(joinedload(ScheduleBlock.course)).filter_by(user_id=user_id, status='upcoming').all()
     week1_data   = [_serialize_block(b) for b in week1_blocks]
 
     # 2. Performance analysis (for frontend display)
@@ -380,7 +384,7 @@ def adapt_schedule_now():
     result = AdaptationEngine.adapt_schedule_for_next_week(user_id)
 
     # 4. Fetch newly generated blocks
-    week2_blocks = ScheduleBlock.query.filter_by(user_id=user_id, status='upcoming').all()
+    week2_blocks = ScheduleBlock.query.options(joinedload(ScheduleBlock.course)).filter_by(user_id=user_id, status='upcoming').all()
     week2_data   = [_serialize_block(b) for b in week2_blocks]
 
     # 5. Fetch the AdaptationLog just created
