@@ -3,14 +3,15 @@ importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
 // Initialize the Firebase app in the service worker
+// Values are injected at build time by Vite (see vite.config.ts)
 firebase.initializeApp({
-  apiKey: "AIzaSyByII6mgOYpW1TGTTTqjnMKhF1v-Es8ZA4",
-  authDomain: "studytrackr-216e9.firebaseapp.com",
-  projectId: "studytrackr-216e9",
-  storageBucket: "studytrackr-216e9.firebasestorage.app",
-  messagingSenderId: "306871233412",
-  appId: "1:306871233412:web:0bf75e338284871e62cbd1",
-  measurementId: "G-RCMQTJBNEH"
+  apiKey: "__VITE_FIREBASE_API_KEY__",
+  authDomain: "__VITE_FIREBASE_AUTH_DOMAIN__",
+  projectId: "__VITE_FIREBASE_PROJECT_ID__",
+  storageBucket: "__VITE_FIREBASE_STORAGE_BUCKET__",
+  messagingSenderId: "__VITE_FIREBASE_MESSAGING_SENDER_ID__",
+  appId: "__VITE_FIREBASE_APP_ID__",
+  measurementId: "__VITE_FIREBASE_MEASUREMENT_ID__",
 });
 
 // Retrieve an instance of Firebase Messaging so that it can handle background messages.

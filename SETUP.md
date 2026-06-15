@@ -46,7 +46,12 @@ python run.py
    ```
    npm install
    ```
-3. Start the dev server:
+3. Copy `.env.example` to `.env` and fill in the Firebase web app credentials
+   (get these from the project lead or Firebase Console > Project Settings > Your apps):
+   ```
+   cp .env.example .env
+   ```
+4. Start the dev server:
    ```
    npm run dev
    ```

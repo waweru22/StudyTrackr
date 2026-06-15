@@ -12,3 +12,6 @@ frontend/node_modules/
 frontend/build/
 frontend/dist/
 frontend/.env
+# Do NOT ignore .env.example files — they are templates with no real values
+!frontend/.env.example
+!backend/.env.example
